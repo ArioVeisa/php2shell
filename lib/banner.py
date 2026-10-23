@@ -98,7 +98,7 @@ def _rule(ch: str = "-") -> str:
 
 
 def render(mode: str = "", profile: str = "", delay: float = 0.0,
-           stealth: bool = True, version: str = "1.0") -> str:
+           stealth: bool = True, version: str = "1.2") -> str:
     c = C(_use_color())
     out = []
     out.append(art(c))

