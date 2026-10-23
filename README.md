@@ -11,8 +11,8 @@
 [![PHP](https://img.shields.io/badge/PHP-5.4%20→%208.4.26-777BB4?style=flat-square&logo=php&logoColor=white)](https://www.php.net)
 [![CVSS](https://img.shields.io/badge/CVSS%204.0-9.2%20Critical-cb2431?style=flat-square)](https://www.first.org/cvss/)
 [![Tests](https://img.shields.io/badge/tests-46%2F46-brightgreen?style=flat-square)](#-verification)
-[![Platform](https://img.shields.io/badge/platform-Linux-blue?style=flat-square&logo=linux&logoColor=white)](#-the-5-lab-requirements)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux-blue?style=flat-square&logo=linux&logoColor=white)](#-requirements)
+[![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
 [Install](#-install) · [Quick start](#-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
@@ -302,7 +302,7 @@ Exploiting third-party systems without authorization is a crime
 The design (identity-only commands, no shell primitives, no exfiltration)
 is intentional — this toolkit proves impact; it does not weaponize beyond proof.
 
-**See [SECURITY.md](SECURITY.md) · License: [MIT](LICENSE)**
+**See [SECURITY.md](SECURITY.md) · License: [GPL-3.0-only](LICENSE)**
 
 </div>
 
