@@ -15,7 +15,7 @@
 [![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#-install) · [Quick start](#-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [Stealth](#-stealth--anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
@@ -182,6 +182,29 @@ ASLR defeated, all offsets resolved, command executed.
 
 `--no-pre-rotate`, `--retries`, `--huge-mb`, `--zif-offset/--dtor-offset`
 expose every tuning knob the chain has.
+
+---
+
+## ❖ Stealth / anti-bot detection
+
+Request yang dikirim ini sengaja dibikin **kelihatan seperti browser asli**, bukan script:
+
+| Lapisan | Apa yang dilakukan |
+|---|---|
+| **TLS/JA3 fingerprint** | `curl_cffi` me-replay handshake browser asli (JA3 + ALPN + extensions persis) — script Python standar bikin JA3 aneh yang langsung ketahuan WAF, ini tidak |
+| **Profil browser lengkap** | `--ja3 chrome` (default), `safari`, `firefox`, `edge`, `android` — TLS + User-Agent + Accept-Language konsisten satu identitas |
+| **Header tampilan normal** | `Accept`, `Accept-Encoding`, `Sec-Fetch-*`, `Upgrade-Insecure-Requests` — persis urutan/isian browser, bukan default `requests`/`urllib` |
+| **Rotasi identitas** | profil bergilir antar request → trafik dari 1 IP tidak selalu profil sama (seperti pengguna nyata beda device) |
+| **Timing manusiawi** | jeda antar request + jitter acak (0,75×–1,35×) — pola kirim robot yang pas-pasan gampang ke-score |
+| **Retry sopan** | backoff eksponensial (2→4→8 detik), bukan nge-brut |
+| **Audit trail lokal** | semua request tercatat di file JSONL (`--audit`) — kamu bisa audit sendiri apa yang terkirim |
+
+```bash
+# contoh: pakai identitas Safari + lewat proxy + jeda 3 detik antar request
+php2shell exploit -u <url> --ja3 safari --proxy http://127.0.0.1:8080 --delay 3 --yes
+```
+
+**Jujur soal batasnya:** ini lolos deteksi *script-vs-browser* klasik (JA3, header, pola timing). Kalau target pakai bot-management berat (Cloudflare Bot Management, Akamai) yang mengecek HTTP/2 frame-order, cookie history, bahkan render JS — itu perlombaan senjata lain dan tool ini tidak mengklaim menang di sana. Untuk lab PHP prefork & mayoritas server biasa: cukup aman. 😉
 
 ---
 
