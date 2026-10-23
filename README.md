@@ -135,6 +135,8 @@ stage 3 percobaan 1 -> uid=33(www-data) gid=33(www-data) groups=33(www-data)
 
 ## 🧱 The 5 lab requirements (why your run may fail elsewhere)
 
+> **Full dependency list** (Python/docker/Binary requirements per use-case): [REQUIREMENTS.md](REQUIREMENTS.md)
+
 1. **`MaxRequestWorkers 1`** — producer & consumer must land on the *same* worker
 2. **`KeepAlive Off`**
 3. **fresh `out/offsets.env`** from `docker/offsets.py` — stale offsets are the #1 silent killer (`zif=0x43a870` = lab build, bukan bookworm!)
