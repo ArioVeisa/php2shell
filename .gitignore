@@ -1,0 +1,22 @@
+# runtime artifacts
+out/
+__pycache__/
+*.pyc
+
+# webshell generator output (contains CREDENTIALS.txt — NEVER commit)
+shell/out/
+
+# legacy prefork lab artifacts (rebuilt by lab/lab_prefork.sh)
+lab/run/
+lab/modphp/
+lab/*.resp
+
+# local scan targets with real hosts
+lab/targets.txt
+
+# offsets cache is environment-specific (regenerate via docker/offsets.py)
+../out/offsets.env
+out/offsets.env
+
+# OS noise
+.DS_Store
