@@ -1,0 +1,4 @@
+# php2shell runtime dependencies
+# (python3 >= 3.9; venv direkomendasikan — lihat install.sh)
+curl_cffi>=0.7        # TLS/JA3 impersonation (chrome/safari/edge/...) — tanpa ini tool fallback urllib (JAUH lebih mudah terdeteksi)
+bcrypt>=4.0           # hashing password webshell (shell/ generator)

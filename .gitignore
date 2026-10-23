@@ -1,4 +1,5 @@
 # runtime artifacts
+.venv/
 out/
 __pycache__/
 *.pyc

