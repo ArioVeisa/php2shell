@@ -15,7 +15,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#install) · [Quick start](#quick-start) · [Modes](#modes) · [How it works](#how-it-works) · [FAQ](#faq) · [Disclaimer](#disclaimer--authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
