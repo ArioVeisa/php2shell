@@ -556,7 +556,35 @@ class TestAdvisory(unittest.TestCase):
         sys.path.insert(0, TOOLKIT)
         from lib import advisory
         self.assertEqual(advisory.CVE_115560["id"], "CVE-2026-115560")
-        self.assertTrue(advisory.CVE_115560["same_fix_floor"])
+
+    def test_cve_ketiga_tidak_diklaim_tertutup_fix_floor(self):
+        """Klaim yang SALAH dan pernah masuk ke tool: "117560 ikut patch 22 Okt".
+
+        Sumber primer (php.net advisory 2026-10-23 + thehackernews 23 Okt):
+        CVE-2026-115560 "is not fixed by PHP 8.5.12, 8.4.27, 8.3.36 or
+        8.2.35". Tes ini mengunci fakta itu supaya tidak ada yang
+        "merapikan" jadi True lagi tanpa bukti baru.
+        """
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        self.assertFalse(advisory.CVE_115560["fixed_by_php2shell_floor"])
+        self.assertNotIn("same_fix_floor", advisory.CVE_115560)
+        # status harus menyebut advisory informasional, bukan "reserved"
+        self.assertIn("2026-10-23", advisory.CVE_115560["status"])
+
+    def test_cve_ketiga_belum_itw(self):
+        """Belum ada eksploitasi in-the-wild 115560; yang ramai = 109618/109619."""
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        self.assertFalse(advisory.CVE_115560["itw_exploited"])
+
+    def test_mitigasi_115560_harus_admin_flag(self):
+        """Mitigasi via ini_set() bisa ditimpa kode aplikasi -> harus php_admin_flag."""
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        s = advisory.describe()
+        self.assertIn("php_admin_flag", s)
+        self.assertIn("TIDAK ditutup 8.5.12", s)
 
     def test_advisory_tidak_mengklaim_eksploitasi(self):
         sys.path.insert(0, TOOLKIT)

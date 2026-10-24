@@ -17,22 +17,30 @@ from __future__ import annotations
 
 # ---------------------------------------------------------------- CVE ketiga
 # CVE-2026-115560: belum punya record MITRE (per 2026-10-24: CVE_RECORD_DNE),
-# advisory lengkap menyusul di rilis reguler. BUKAN bagian PHP2Shell awal.
+# advisory informasional php.net 2026-10-23, advisory lengkap menyusul di
+# rilis reguler. BUKAN bagian PHP2Shell awal.
+#
+# TERVERIFIKASI 2026-10-24 dari sumber primer + thehackernews/getastra:
+#   - "is not fixed by PHP 8.5.12, 8.4.27, 8.3.36 or 8.2.35"  <-- PENTING
+#   - belum ada eksploitasi ITW (serangan 21 Okt menargetkan 109618/109619)
+#   - PHP belum menyatakan versi terdampak, rilis pemuat fix, atau skor
 CVE_115560 = {
     "id": "CVE-2026-115560",
     "title": "Session upload progress (jalur ketiga)",
-    "status": "reserved — advisory lengkap menyusul di rilis reguler",
-    "same_fix_floor": True,   # ikut patch branch yang sama
+    "status": "advisory informasional 2026-10-23; advisory lengkap menyusul",
+    "fixed_by_php2shell_floor": False,
+    "itw_exploited": False,
     "requires": [
         "session.serialize_handler = php_binary ATAU php_serialize (di konfigurasi)",
-        "lalu diubah ke php saat runtime via ini_set() sebelum session_start()",
+        "lalu diubah ke php saat runtime via ini_set() SEBELUM session_start()",
         "session.upload_progress.enabled = On",
     ],
     "mitigation": "session.upload_progress.enabled=0",
     "note": (
         "Kombinasi konfigurasi + kode aplikasi yang tidak lazim; PHP Foundation "
         "menilainya tidak terjadi di praktik normal, jadi ditangani di siklus "
-        "rilis reguler, bukan rilis darurat."
+        "rilis reguler, bukan rilis darurat. TIDAK ikut tertutup oleh rilis "
+        "PHP2Shell 8.5.12 / 8.4.27 / 8.3.36 / 8.2.35."
     ),
 }
 
@@ -96,8 +104,10 @@ def warnings_for(verdict: str, patched_release_day: str | None = None) -> list[s
     if verdict == "patched":
         out.append(REPACK_NOTICE)
         out.append(
-            f"CVE ketiga ({CVE_115560['id']}) ikut ditutup patch yang sama, "
-            f"tapi hanya bila session.upload_progress.enabled=0 juga dipasang."
+            f"{CVE_115560['id']} TIDAK ditutup fix-floor ini "
+            f"(8.5.12/8.4.27/8.3.36/8.2.35). Mitigasi satu-satunya: "
+            f"{CVE_115560['mitigation']} — pasang sebagai php_admin_flag, "
+            f"bukan ini_set(), karena kode aplikasi bisa menimpanya."
         )
     return out
 
@@ -112,7 +122,9 @@ def describe() -> str:
         f"2. CVE ketiga: {CVE_115560['id']} — {CVE_115560['title']}",
         f"   status   : {CVE_115560['status']}",
         "   syarat   : " + " + ".join(CVE_115560["requires"]),
-        f"   mitigasi : {CVE_115560['mitigation']}",
+        f"   mitigasi : {CVE_115560['mitigation']} (php_admin_flag, bukan ini_set)",
+        f"   patch    : TIDAK ditutup 8.5.12/8.4.27/8.3.36/8.2.35",
+        f"   ITW      : {'ya' if CVE_115560['itw_exploited'] else 'belum dilaporkan'}",
         f"   catatan  : {CVE_115560['note']}",
         "",
         "3. Mitigasi yang sering disalahpahami:",
