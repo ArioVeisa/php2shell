@@ -102,6 +102,7 @@ class Transport:
         proxy: str | None = None,
         audit_log: str | Path | None = None,
         retries: int = 2,
+        verbose: bool = False,
     ) -> None:
         if profile not in PROFILES:
             raise ValueError(f"profil tidak dikenal: {profile} (pilihan: {', '.join(PROFILES)})")
@@ -112,6 +113,7 @@ class Transport:
         self.proxy = proxy
         self.retries = max(0, retries)
         self.audit_path = Path(audit_log) if audit_log else None
+        self.verbose = bool(verbose)
         self._last = 0.0
         self._session = None
 
@@ -185,6 +187,10 @@ class Transport:
             except Exception as exc:  # noqa: BLE001 - semua error jaringan jadi Response
                 resp = Response(url=url, status=0, error=f"{type(exc).__name__}: {exc}")
             resp.elapsed_ms = int((time.monotonic() - start) * 1000)
+            if self.verbose:
+                err = f" err={resp.error}" if resp.error else ""
+                print(f"    [{method}] {resp.status} {resp.elapsed_ms}ms "
+                      f"{len(data) if data else 0}B {url}{err}", flush=True)
             self._audit({
                 "profile": self.profile_name,
                 "method": method,

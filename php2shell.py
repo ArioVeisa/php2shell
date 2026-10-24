@@ -168,6 +168,7 @@ def _mk_transport(args) -> Transport:
     return Transport(
         profile=args.ja3, delay=args.delay, timeout=args.timeout,
         proxy=args.proxy, audit_log=args.audit,
+        verbose=bool(getattr(args, "verbose", False)),
     )
 
 
@@ -347,7 +348,7 @@ def _run_exploits(candidates: list[dict], args) -> None:
             fetch=args.fetch or "",
             timeout=args.timeout or 15.0,
             max_total_timeout=args.exploit_timeout,
-            quiet=False,
+            quiet=not args.verbose,
         )
         r["exploit"] = res.as_dict()
         tag = "PROOF" if res.success else "gagal"
@@ -566,7 +567,6 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--timeout", type=int, default=15, help="timeout HTTP detik (default: 15)")
     common.add_argument("--proxy", default=None, help="proxy http(s), mis. http://127.0.0.1:8080")
     common.add_argument("--audit", default=None, help="tulis audit JSONL ke file ini")
-    common.add_argument("--python", default=None, help="python untuk exploit.py (default: yang sedang jalan)")
     common.add_argument("--no-upload-progress", action="store_true", help="lewati probe upload_progress")
     common.add_argument("--no-display-errors", action="store_true", help="lewati probe display_errors")
     common.add_argument("--json", default=None, help="path output JSON")

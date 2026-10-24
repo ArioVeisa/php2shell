@@ -15,7 +15,7 @@
 [![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [Sources](#-where-this-comes-from-sumber-hasil-audit) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [Sumber repo](#-sumber-repo-bukan-fork-tapi-turunan-beberapa-repo) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
@@ -276,35 +276,63 @@ Uji lokal: `php -l <file>` lalu `php -S 127.0.0.1:8099`.
 
 ---
 
-## ❖ Where this comes from — sumber & hasil audit
+## ❖ Sumber repo — bukan fork, tapi turunan beberapa repo
 
-Biar tidak ada yang menebak: **teknik rantainya bukan karya kami.** Yang kami
-kerjakan adalah reproduksi, orkestrasi, pagar keamanan, dan verifikasi.
+Repo ini **bukan fork**. Tidak ada satu repo pun yang bisa di-fork lalu jadi
+php2shell, karena bahannya diambil dari **empat sumber berbeda** (tiga repo
+publik + dua advisori resmi). Karena itu sumbernya dicantumkan satu per satu
+di sini, bukan lewat mekanisme "forked from".
 
-| Sumber | Penulis | Yang diambil | Lisensi |
-|---|---|---|---|
-| [9bie/php2shell-bypass-aslr-exp](https://github.com/9bie/php2shell-bypass-aslr-exp) | **9bie (Qi Deng)** | **Rantai inti**: 2-request `session.upload_progress` UAF (CVE-2026-109619), ASLR bypass via heap + `libphp` base leak, aktuator `pDestructor = zif_system`. `lib/chain.py` = port logikanya jadi modul in-process. | tidak ada file lisensi (hak cipta default) |
-| [Zer061/CVE-2026-109618](https://github.com/Zer061/CVE-2026-109618) | **Zer061** (+ v.dir.mir, 9bie) | Fork tempat `exploit.py` acuan byte-level kami diambil (sha256 `ea925683…`). Riwayatnya campuran: `adc5f9b` oleh 9bie, `5fc5669` oleh v.dir.mir (**menambah `--revshell`**), `4752adc` oleh Zer061. | tidak ada file lisensi |
-| [ikow/php2shell-poc](https://github.com/ikow/php2shell-poc) | **ikow** | Verifikator crash CVE-2026-109618 (`poc/verify_oom_trigger.py`). | dirujuk, tidak di-vendor |
-| GHSA-w8hw-w9fx-j79w / GHSA-6wmf-4rv5-p3rp | **PHP Group** | Pemetaan CVE + fix-floor 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 | data advisi publik |
-| `curl_cffi` | lexiforest / yifeikong | JA3/TLS impersonation di `lib/transport.py`. | MIT (dependency) |
+### Repo yang diambil
 
-**Yang asli di repo ini:** CLI 5 mode, `lib/chain.py` sebagai engine in-process,
-auto-proof baca `out/p1`, pagar perintah (whitelist 14 byte + tolak chaining +
-tanpa `--revshell`), model skor preflight, lapisan stealth (JA3/jitter/audit),
-46 unit test, installer, Docker lab, GPL-3.0.
-Detail lengkap + status lisensi: **[ATTRIBUTION.md](ATTRIBUTION.md)**
+| # | Repo | Penulis | Yang diambil dari sini | Lisensi |
+|---|---|---|---|---|
+| 1 | `https://github.com/9bie/php2shell-bypass-aslr-exp` | **9bie (Qi Deng)** | **Rantai inti**: 2-request `session.upload_progress` UAF (CVE-2026-109619), ASLR bypass lewat heap + `libphp` base leak, aktuator `pDestructor = zif_system`. `lib/chain.py` = port logikanya jadi modul in-process. | tidak ada file lisensi (hak cipta default) |
+| 2 | `https://github.com/Zer061/CVE-2026-109618` | **Zer061** (+ v.dir.mir, 9bie) | Fork tempat `exploit.py` acuan byte-level kami diambil (sha256 `ea925683…`). Riwayatnya campuran: `adc5f9b` oleh 9bie, `5fc5669` oleh v.dir.mir (**menambah `--revshell`**), `4752adc` oleh Zer061. **Sudah di-takedown GitHub.** | tidak ada file lisensi |
+| 3 | `https://github.com/ikow/php2shell-poc` | **ikow** | Verifikator crash CVE-2026-109618 (`poc/verify_oom_trigger.py`). | dirujuk, tidak di-vendor |
+| 4 | `curl_cffi` — `https://github.com/lexiforest/curl_cffi` | lexiforest / yifeikong | JA3/TLS impersonation di `lib/transport.py`. | MIT (dependency) |
+
+### Advisori & data resmi
+
+| Sumber | Yang diambil |
+|---|---|
+| `GHSA-w8hw-w9fx-j79w` (PHP Group) | CVE-2026-109618 — OOM dalam `session.upload_progress` |
+| `GHSA-6wmf-4rv5-p3rp` (PHP Group) | CVE-2026-109619 — UAF di `php_session_initialize()` |
+| php.net changelog 8.4.27 | fix-floor 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 |
+
+### Kenapa tidak bisa di-fork
+
+Fork = satu garis keturunan git. Di sini:
+
+- rantai eksploitasi datang dari **9bie** (repo 1), tapi build-nya `exploit.py`
+  kami ambil dari **fork Zer061** (repo 2) yang riwayatnya sendiri campuran
+  tiga penulis;
+- verifikasi kerentanan CVE-2026-109618 dari **ikow** (repo 3);
+- semantik versi & fix-floor dari **advisori PHP Group** (bukan repo);
+
+Tidak ada satu pun dari mereka yang bisa jadi "parent" tunggal. Yang kami tulis
+sendiri: CLI 5 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
+pagar perintah, skor preflight, mode stealth, 46 unit test, installer, lab Docker.
 
 ### Kenapa `--revshell` tidak ada di sini
 
-`exploit.py` upstream (fork Zer061, commit `5fc5669` oleh v.dir.mir) **punya**
-`--revshell` — payload bash/python/perl + listener `nc` yang menyerahkan shell
-interaktif. Itu mengubah alat bukti-akses menjadi backdoor. Di toolkit ini:
+`exploit.py` acuan kami (sha256 `ea925683…`, dari repo 2) **mengandung reverse
+shell** yang ditambahkan commit `5fc5669` oleh **v.dir.mir**:
 
-- `--revshell` **tidak terdaftar di parser** (argparse menolaknya sebagai argumen tak dikenal),
-- kata `revshell` / `bash` / `nc` / `sh` **ditolak di level runner** sebelum satu paket pun dikirim,
-- perintah dibatasi 14 byte, hanya `id`/`whoami`/`uname`/`hostname`/`pwd`
-  (+`--allow-cmd` whitelist kecil), operator `; | & $ \` > <` ditolak.
+- payload `bash` lewat `/dev/tcp/{ip}/{port}`
+- payload `python3` pty spawn
+- payload `perl` socket exec
+- listener `nc` yang menyerahkan shell interaktif
+
+Ini fitur terdokumentasi, **bukan trojan tersembunyi** — tapi ini juga alasan
+sah GitHub men-takedown repo asalnya. Kami tidak mengadopsinya:
+
+| Upstream | php2shell |
+|---|---|
+| `--revshell IP:PORT` | **tidak terdaftar di argparse** |
+| payload `bash`/`python`/`perl` | tidak bisa dikirim (batas 14 byte + whitelist) |
+| `sh</out/c` | `<` dan `>` ditolak sebagai operator |
+| listener `nc` | **tidak diimplementasikan** |
 
 ### Hasil audit forensik — SELURUH riwayat git (2026-10-24)
 
@@ -314,31 +342,16 @@ dipindai. Laporan penuh: `AUDIT_FORENSIK_Zer061_2026-10-24.md` (SSD lab).
 | Pemeriksaan | Hasil |
 |---|---|
 | C2 / host eksternal hardcoded | **tidak ada** — hanya `hub.docker.com` di README, `127.0.0.1`, `localhost` |
-| Pencurian kredensial (`~/.ssh`, `.aws`, `/etc/shadow`, `.netrc`, cookie upload) | **tidak ada** |
-| Persistence (`crontab`, `systemd`, `rc.local`, autostart, LaunchAgents) | **tidak ada** |
-| Obfuscation (`b64decode`/`b85decode`, hex blob, `chr()` chain, keylogger) | **tidak ada** — `\x..` = byte array protokol; blob `MMMM`/`0000` = padding biner |
-| Binary tak dikenal | **tidak ada** — hanya `src/php-8.4.26.tar.gz` (source PHP resmi) + 1 PNG |
-| Keylogger / browser stealer / clipboard hijack | **tidak ada** |
-| `scp` ke host luar | **tidak ada** — hanya `172.16.1.112` (RFC1918, VM lab penulis di NOTES.md) |
-| `subprocess` / `eval` / `exec` | sah: `docker cp` (ambil `libphp.so`), generator `safe_shell.py`, test suite |
-| Socket mentah (`socket.create_connection`) | **wajib** — rantai lewat TCP langsung agar handshake TLS tidak dinormalisasi library |
-| **`--revshell` + payload bash/python/perl + listener `nc`** | **ADA di source acuan** (commit `5fc5669`, v.dir.mir) — **diblokir total di toolkit ini** |
+| Pencurian kredensial (`~/.ssh`, `.aws`, `/etc/shadow`, `.netrc`) | **tidak ada** |
+| Persistence (`crontab`, `systemd`, `rc.local`, autostart) | **tidak ada** |
+| Obfuscation (`b64decode`, hex blob, `chr()` chain, keylogger) | **tidak ada** — `\x..` = byte array protokol |
+| Binary tak dikenal | **tidak ada** — hanya `php-8.4.26.tar.gz` resmi + 1 PNG |
+| `scp` ke host luar | **tidak ada** — hanya `172.16.1.112` (RFC1918, VM lab penulis) |
+| **`--revshell` + payload + listener `nc`** | **ADA di source acuan** — **diblokir total di sini** |
 
-**Temuan yang harus dibaca apa adanya:** `exploit.py` acuan kami (sha256
-`ea925683…`) **mengandung reverse shell**, bukan malware tersembunyi:
-3 vektor payload (`bash` `/dev/tcp`, `python3` pty, `perl` socket) ditulis ke
-`out/c` lalu dieksekusi lewat `sh</out/c`, plus listener `nc`. Itu fitur
-terdokumentasi, bukan trojan — tapi itu juga alasan sah GitHub men-takedown
-repo asalnya. Kata "pristine" di dokumen lama artinya **tidak diubah oleh kami**,
-bukan **tidak berbahaya**.
-
-**Yang sudah kami blokir:** `--revshell` bukan argumen di parser, kata
-`bash`/`nc`/`sh`/`revshell` ditolak runner, perintah maks 14 byte
-(`id`/`whoami`/`uname`/`hostname`/`pwd` saja), operator `; | & $ \` > <` ditolak,
-listener `nc` tidak diimplementasikan. Diverifikasi 16/16 test penolakan.
-
-31 file yang di-track git sudah di-`sha256sum`, 46/46 test lulus. Kalau kamu
-fork repo ini, **diff dulu sebelum percaya** — aturan yang sama kami pakai ke upstream.
+Kata "pristine" di dokumen lama artinya **tidak diubah oleh kami**, bukan
+**tidak berbahaya**. Kalau kamu fork repo ini, **diff dulu sebelum percaya** —
+aturan yang sama kami pakai ke upstream.
 
 ---
 
