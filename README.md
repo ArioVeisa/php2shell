@@ -272,7 +272,38 @@ Uji lokal: `php -l <file>` lalu `php -S 127.0.0.1:8099`.
 | `--no-upload-progress` | skip probe upload_progress saat detect |
 | `--no-display-errors` | skip probe display_errors saat detect |
 | `--json / --csv` | output file laporan |
-| `-v` | verbose — tampilkan tiap request |
+| `-v, --verbose` | tampilkan tiap request (status, durasi, ukuran body, error) |
+
+### Flag lanjutan (scan & exploit)
+
+| Flag | Fungsi |
+|---|---|
+| `--quiet` | perkecil output rantai (kebalikan `-v`) |
+| `--cve {CVE-2026-109618,CVE-2026-109619}` | pilih CVE yang ditembak (default 109619) |
+| `--fetch URL` | URL yang di-fetch lewat RCE setelah eksekusi (kanal baca hasil) |
+| `--proof-file FILE` | simpan bukti (PROOF output) ke file |
+| `--output-file FILE` | tulis output mentah rantai ke file |
+| `--offsets-file FILE` | pakai profil offset dari file; `''` = jangan pakai profil lab |
+| `--no-auto-offsets` | jangan cari offset otomatis (paksa pakai `--zif-offset`/`--dtor-offset`) |
+| `--no-pre-rotate` | jangan rotate worker sebelum preflight |
+| `--no-retry-rotate` | jangan rotate worker saat retry |
+
+### Flag mode `detect` / `preflight`
+
+| Flag | Fungsi |
+|---|---|
+| `-u, --urls URL [URL ...]` | satu atau lebih URL langsung |
+| `-l, --list FILE` | atau baca daftar URL dari file `.txt` |
+
+### Flag mode `shell`
+
+| Flag | Fungsi |
+|---|---|
+| `--out DIR` | folder keluaran webshell (default `shell/`) |
+| `--ttl JAM` | masa berlaku webshell dalam jam (default 72) |
+| `--commands "a,b,c"` | whitelist perintah di webshell (default `id,whoami`) |
+| `--author NAMA` | tanda tangan author di header webshell |
+| `--purpose TEKS` | keterangan tujuan di header webshell |
 
 ---
 
