@@ -110,13 +110,15 @@ def classify(version: str, branch: str) -> tuple[str, str, str | None]:
     if not floor:
         return ("unknown", f"branch {branch} tidak ada di peta fix-floor", None)
     fmaj, fmin = floor
-    fix = f"{fmaj}.{fmin}"
+    # fmin adalah PATCH number, bukan minor: branch "8.4" → floor "8.4.27".
+    # Dulu diformat f"{fmaj}.{fmin}" sehingga muncul "8.27" (salah).
+    fix = f"{fmaj}.{branch.split('.')[1]}.{fmin}"
     parts = version.split(".")
     try:
         maj, mnr, pat = int(parts[0]), int(parts[1]), int(parts[2])
     except (IndexError, ValueError):
         return ("unknown", f"versi tidak bisa diparse: {version}", fix)
-    if (maj, mnr) < (fmaj, fmin):
+    if (maj, mnr, pat) < (fmaj, int(branch.split(".")[1]), fmin):
         last = LAST_VULN.get(branch, "?")
         return (
             "vulnerable",

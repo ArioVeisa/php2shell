@@ -21,3 +21,5 @@ out/offsets.env
 
 # OS noise
 .DS_Store
+
+out/version-check.json

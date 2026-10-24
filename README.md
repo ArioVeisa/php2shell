@@ -260,6 +260,41 @@ disimpan di shell). Fitur: password bcrypt, whitelist perintah per shell,
 TTL kedaluwarsa, rate limit. **Generator saja — tidak meng-upload.**
 Uji lokal: `php -l <file>` lalu `php -S 127.0.0.1:8099`.
 
+### `version` — cek versi otomatis
+
+```bash
+php2shell.py version                  # bandingkan dengan rilis publik di GitHub
+php2shell.py version --no-cache       # abaikan cache 1 jam
+php2shell.py version --json out/v.json
+php2shell.py detect -u https://t/ --check-version   # cek dulu, lalu lanjut
+```
+
+Sumber pembanding (berurutan, gagal-aman):
+
+| Urutan | Sumber | Keterangan |
+|---|---|---|
+| 1 | `releases/latest` | tag rilis GitHub (kalau sudah ada rilis) |
+| 2 | `/tags` | tag tertinggi, diurutkan numerik (bukan leksikal) |
+| 3 | `VERSION` di branch `main` | fallback selama repo belum punya tag |
+
+Perilaku:
+
+- **Gagal-aman**: offline, DNS mati, GitHub rate-limit, repo 404 → status
+  `unknown` + alasan. Tidak pernah crash, tidak pernah menggagalkan mode utama.
+- **Semver numerik**: `1.10` dianggap lebih baru dari `1.2` (bukan string compare).
+- **Cache 1 jam** di `out/version-check.json` supaya tidak kena rate-limit GitHub.
+- **Tanpa telemetry**: hanya GET ke GitHub, tidak mengirim data apa pun.
+- **Exit code**: `0` = terbaru / tidak bisa dicek, `10` = ada update (bisa dipakai
+  sebagai gate CI).
+
+```
+[OK]   lokal   : 1.2
+      remote  : 1.2  (sumber: branch)
+      status  : current
+      pesan   : php2shell 1.2 — sudah versi terbaru
+      repo    : https://github.com/aarsaputra/php2shell
+```
+
 ### Flag global (berlaku semua mode)
 
 | Flag | Fungsi |

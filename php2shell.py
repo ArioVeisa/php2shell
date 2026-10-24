@@ -43,6 +43,7 @@ from lib import banner as banner_mod  # noqa: E402
 from lib import detect as detect_mod  # noqa: E402
 from lib import preflight as preflight_mod  # noqa: E402
 from lib import reporter  # noqa: E402
+from lib import version as version_mod  # noqa: E402
 from lib.exploit_runner import (  # noqa: E402
     DEFAULT_CMD,
     build_command_preview,
@@ -520,6 +521,38 @@ def cmd_shell(args) -> int:
     return subprocess.run(argv).returncode
 
 
+def cmd_version(args) -> int:
+    """Cek versi tools ini vs rilis terbaru di GitHub.
+
+    Exit code: 0 = sudah terbaru / tidak bisa dicek (bukan kegagalan pakai),
+    10 = ada versi lebih baru (skrip CI bisa pakai ini sebagai gate).
+    """
+    vc = version_mod.check(
+        VERSION,
+        use_cache=not getattr(args, "no_cache", False),
+    )
+    mark = {"current": "[OK]  ", "behind": "[BARU]", "ahead": "[DEV] ", "unknown": "[?]   "}[vc.status]
+    print(f"{mark} lokal   : {vc.local}")
+    print(f"      remote  : {vc.remote or '-'}" + (f"  (sumber: {vc.remote_source})" if vc.remote_source else ""))
+    print(f"      status  : {vc.status}")
+    print(f"      pesan   : {vc.message}")
+    print(f"      repo    : {vc.url}")
+    if vc.update_available:
+        print("\n  cara update:")
+        print(f"    git -C {ROOT} pull --ff-only")
+        print(f"    atau unduh: {vc.url}/archive/refs/heads/main.tar.gz")
+
+    if getattr(args, "json", None):
+        import json as _json
+
+        p = Path(args.json)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(_json.dumps(vc.as_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"\n  json -> {p}")
+
+    return 10 if vc.update_available else 0
+
+
 # --------------------------------------------------------------- parser ----
 
 class BannerHelp(argparse.RawDescriptionHelpFormatter):
@@ -572,6 +605,8 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--json", default=None, help="path output JSON")
     common.add_argument("--csv", default=None, help="path output CSV")
     common.add_argument("-v", "--verbose", action="store_true", help="tampilkan setiap request")
+    common.add_argument("--check-version", action="store_true",
+                        help="cek versi terbaru di GitHub sebelum menjalankan mode")
 
     ap = argparse.ArgumentParser(
         prog="php2shell",
@@ -630,6 +665,13 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("--commands", default=None)
     sh.add_argument("--author", default=None)
     sh.add_argument("--purpose", default=None)
+
+    vp = sub.add_parser("version", parents=[common], formatter_class=SubHelp, prog="php2shell version",
+                        help="cek versi tools ini vs rilis terbaru di GitHub",
+                        epilog=("contoh:\n"
+                                "  php2shell.py version\n"
+                                "  php2shell.py version --json out/version.json\n"))
+    vp.add_argument("--no-cache", action="store_true", help="abaikan cache 1 jam, cek ulang ke GitHub")
     return ap
 
 
@@ -679,6 +721,15 @@ def main(argv: list[str] | None = None) -> int:
 
     _banner(args, mode=args.mode)
 
+    # --check-version / mode `version`: tanya GitHub sekali, jangan pernah
+    # menggagalkan jalan utama kalau offline (gagal-aman by design).
+    if getattr(args, "check_version", False):
+        vc = version_mod.check(VERSION, use_cache=True)
+        print(f"  {version_mod.format_line(vc)}")
+        if vc.update_available:
+            print(f"  -> update: git -C {ROOT} pull --ff-only   ({vc.url})")
+        print()
+
     try:
         if args.mode == "scan":
             return cmd_scan(args)
@@ -692,6 +743,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_exploit(args)
         if args.mode == "shell":
             return cmd_shell(args)
+        if args.mode == "version":
+            return cmd_version(args)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

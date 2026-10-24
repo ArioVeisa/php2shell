@@ -249,7 +249,7 @@ class TestKlaimBanner(unittest.TestCase):
                          "exploit_runner.py masih memanggil subprocess.run")
 
         # Bukti positif: mesin rantai internal benar-benar dipakai.
-        src = open(path).read()
+        src = open(path, encoding="utf-8").read()
         self.assertIn("chain_mod", src,
                       "exploit_runner.py tidak memakai mesin rantai internal")
 
@@ -260,7 +260,8 @@ class TestKlaimBanner(unittest.TestCase):
         import hashlib
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         p = os.path.join(here, "lib", "chain.py")
-        now = hashlib.sha256(open(p, "rb").read()).hexdigest()
+        with open(p, "rb") as fh:
+            now = hashlib.sha256(fh.read()).hexdigest()
         # hash ini TERVERIFIKASI saat pemisahan repo (23 Okt 2026)
         self.assertEqual(now,
             "217e529ccdbe093115ab496c85a056a96af8aa98b5c05d3fe1aeb677c1c23ac4",
@@ -307,6 +308,93 @@ class TestVersion(unittest.TestCase):
         """Baris versi tidak boleh membawa ASCII art banner."""
         rc, out, err = run("--version", timeout=60)
         self.assertNotIn("____", out, "banner ASCII ikut tercetak di --version")
+
+
+
+class TestFixFloor(unittest.TestCase):
+    """Fix-floor harus diformat MAJOR.MINOR.PATCH, bukan MAJOR.PATCH.
+
+    Regresi: `FIX_FLOOR["8.4"] = (8, 27)` dulu diformat jadi "8.27" sehingga
+    laporan menulis "PHP 8.4.26 < fix-floor 8.27" — angka yang tidak ada.
+    """
+
+    def test_format_fix_floor_lengkap(self):
+        from lib.detect import classify
+
+        harapan = {
+            "8.2": "8.2.35", "8.3": "8.3.36", "8.4": "8.4.27", "8.5": "8.5.12",
+        }
+        for branch, fix in harapan.items():
+            with self.subTest(branch=branch):
+                _, reason, got = classify(f"{branch}.0", branch)
+                self.assertEqual(got, fix, f"fix-floor {branch} salah: {got!r}")
+                self.assertIn(fix, reason)
+
+    def test_batas_rentan_dan_patched(self):
+        from lib.detect import classify
+
+        for branch, last, first_fixed in (
+            ("8.2", "8.2.34", "8.2.35"),
+            ("8.3", "8.3.35", "8.3.36"),
+            ("8.4", "8.4.26", "8.4.27"),
+            ("8.5", "8.5.11", "8.5.12"),
+        ):
+            with self.subTest(branch=branch):
+                self.assertEqual(classify(last, branch)[0], "vulnerable", last)
+                self.assertEqual(classify(first_fixed, branch)[0], "patched", first_fixed)
+
+    def test_branch_eol(self):
+        from lib.detect import classify
+
+        for v in ("5.4.45", "7.4.33", "8.0.30", "8.1.34"):
+            with self.subTest(version=v):
+                self.assertEqual(classify(v, ".".join(v.split(".")[:2]))[0], "eol")
+
+
+class TestCekVersi(unittest.TestCase):
+    """Cek versi otomatis — offline: hanya logika compare/local, tanpa jaringan."""
+
+    def test_compare_semantik(self):
+        from lib.version import compare
+
+        self.assertEqual(compare("1.2", "1.2"), "current")
+        self.assertEqual(compare("v1.2", "1.2.0"), "current")
+        self.assertEqual(compare("1.2", "1.3"), "behind")
+        self.assertEqual(compare("1.2", "1.10"), "behind", "1.10 > 1.2 secara numerik")
+        self.assertEqual(compare("1.10", "1.2"), "ahead")
+        self.assertEqual(compare("2.0.0", "1.99.99"), "ahead")
+        self.assertEqual(compare("x", "1.2"), "unknown")
+
+    def test_local_version_dibaca(self):
+        from lib.version import local_version
+
+        self.assertEqual(local_version(), VERSI_DIHARAPKAN)
+
+    def test_offline_tidak_melempar_exception(self):
+        """Host mati harus jadi status 'unknown', bukan crash."""
+        from lib import version as V
+
+        simpan = (V.API_RELEASE_URL, V.API_TAGS_URL, V.RAW_VERSION_URL)
+        V.API_RELEASE_URL = "http://127.0.0.1:9/a"
+        V.API_TAGS_URL = "http://127.0.0.1:9/b"
+        V.RAW_VERSION_URL = "http://127.0.0.1:9/c"
+        try:
+            vc = V.check("1.2", use_cache=False, timeout=2)
+            self.assertEqual(vc.status, "unknown")
+            self.assertTrue(vc.message)
+        finally:
+            V.API_RELEASE_URL, V.API_TAGS_URL, V.RAW_VERSION_URL = simpan
+
+    def test_subcommand_version_bisa_dijalankan(self):
+        rc, out, err = run("version", "--no-cache", timeout=90)
+        self.assertIn(rc, (0, 10), f"exit {rc}: {err}")
+        self.assertIn("lokal", out)
+        self.assertIn("remote", out)
+
+    def test_flag_check_version_dikenal_parser(self):
+        rc, out, err = run("detect", "--help", timeout=60)
+        self.assertEqual(rc, 0)
+        self.assertIn("--check-version", out)
 
 
 if __name__ == "__main__":
