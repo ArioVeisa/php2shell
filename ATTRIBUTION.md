@@ -85,6 +85,12 @@ Both this repo and the Zer061 source folder were checked for:
 | unknown binaries | none — only official `php-8.4.26.tar.gz` + one PNG |
 | `subprocess`/`os.system`/`eval`/`exec` | legitimate only: `docker cp` for `libphp.so`, the `safe_shell.py` generator, test suite |
 | raw `socket.create_connection` | required — the chain speaks TCP directly so TLS/handshake is not normalised by a library |
-| `--revshell` / reverse-shell payloads | not present in parser, blocked in code |
+| `--revshell` / reverse-shell payloads | **PRESENT in the reference `exploit.py`** (commit `5fc5669`, v.dir.mir): 3 vectors (bash `/dev/tcp`, python pty, perl socket) written to `out/c`, executed via `sh</out/c`, plus an `nc` listener. **Blocked in this toolkit**: not in argparse, words `bash`/`nc`/`sh` rejected by the runner, no listener implemented. |
 
 All 31 git-tracked files were hashed with `sha256sum`; 46/46 tests pass.
+
+**Full forensic scope:** all 384 blobs across all 19 commits were extracted and
+scanned (not just the working tree). No C2 host, no credential theft, no
+persistence, no obfuscation, no unknown binaries. The only "weapon" is the
+documented `--revshell` feature — which is why GitHub took the original repo down.
+See `AUDIT_FORENSIK_Zer061_2026-10-24.md` on the lab SSD.

@@ -306,20 +306,36 @@ interaktif. Itu mengubah alat bukti-akses menjadi backdoor. Di toolkit ini:
 - perintah dibatasi 14 byte, hanya `id`/`whoami`/`uname`/`hostname`/`pwd`
   (+`--allow-cmd` whitelist kecil), operator `; | & $ \` > <` ditolak.
 
-### Hasil audit anti-malware (2026-10-24)
+### Hasil audit forensik — SELURUH riwayat git (2026-10-24)
 
-Repo ini dan folder sumbernya diperiksa sebelum dipublikasikan:
+Bukan hanya working tree: **semua 384 blob dari 19 commit** diekstrak dan
+dipindai. Laporan penuh: `AUDIT_FORENSIK_Zer061_2026-10-24.md` (SSD lab).
 
 | Pemeriksaan | Hasil |
 |---|---|
-| Koneksi keluar ke host hardcoded (C2) | **tidak ada** — hanya `127.0.0.1`, `localhost`, URL dokumentasi |
-| Pencurian kredensial (`~/.ssh`, `.aws`, `/etc/shadow`, cookie upload) | **tidak ada** |
-| Persistence (`crontab`, `systemd`, `.bashrc`, `rc.local`, autostart) | **tidak ada** |
-| Obfuscation (`b64decode` masif, hex blob, `chr()` chain) | **tidak ada** — semua `\x..` adalah byte array protokol di `tools/align8.py`, `tools/warn_probe.py` |
-| Binary tak dikenal | **tidak ada** — hanya `src/php-8.4.26.tar.gz` (source PHP resmi) + 1 PNG screenshot |
-| `subprocess` / `os.system` / `eval` / `exec` | hanya untuk keperluan sah: `docker cp` (ambil `libphp.so`), `python shell/safe_shell.py` (generator), test suite |
-| Socket mentah (`socket.create_connection`) | **wajib** — rantai berjalan lewat TCP langsung supaya handshake TLS tidak dinormalisasi library |
-| `--revshell` / payload reverse shell | **tidak ada di parser**, diblokir di kode |
+| C2 / host eksternal hardcoded | **tidak ada** — hanya `hub.docker.com` di README, `127.0.0.1`, `localhost` |
+| Pencurian kredensial (`~/.ssh`, `.aws`, `/etc/shadow`, `.netrc`, cookie upload) | **tidak ada** |
+| Persistence (`crontab`, `systemd`, `rc.local`, autostart, LaunchAgents) | **tidak ada** |
+| Obfuscation (`b64decode`/`b85decode`, hex blob, `chr()` chain, keylogger) | **tidak ada** — `\x..` = byte array protokol; blob `MMMM`/`0000` = padding biner |
+| Binary tak dikenal | **tidak ada** — hanya `src/php-8.4.26.tar.gz` (source PHP resmi) + 1 PNG |
+| Keylogger / browser stealer / clipboard hijack | **tidak ada** |
+| `scp` ke host luar | **tidak ada** — hanya `172.16.1.112` (RFC1918, VM lab penulis di NOTES.md) |
+| `subprocess` / `eval` / `exec` | sah: `docker cp` (ambil `libphp.so`), generator `safe_shell.py`, test suite |
+| Socket mentah (`socket.create_connection`) | **wajib** — rantai lewat TCP langsung agar handshake TLS tidak dinormalisasi library |
+| **`--revshell` + payload bash/python/perl + listener `nc`** | **ADA di source acuan** (commit `5fc5669`, v.dir.mir) — **diblokir total di toolkit ini** |
+
+**Temuan yang harus dibaca apa adanya:** `exploit.py` acuan kami (sha256
+`ea925683…`) **mengandung reverse shell**, bukan malware tersembunyi:
+3 vektor payload (`bash` `/dev/tcp`, `python3` pty, `perl` socket) ditulis ke
+`out/c` lalu dieksekusi lewat `sh</out/c`, plus listener `nc`. Itu fitur
+terdokumentasi, bukan trojan — tapi itu juga alasan sah GitHub men-takedown
+repo asalnya. Kata "pristine" di dokumen lama artinya **tidak diubah oleh kami**,
+bukan **tidak berbahaya**.
+
+**Yang sudah kami blokir:** `--revshell` bukan argumen di parser, kata
+`bash`/`nc`/`sh`/`revshell` ditolak runner, perintah maks 14 byte
+(`id`/`whoami`/`uname`/`hostname`/`pwd` saja), operator `; | & $ \` > <` ditolak,
+listener `nc` tidak diimplementasikan. Diverifikasi 16/16 test penolakan.
 
 31 file yang di-track git sudah di-`sha256sum`, 46/46 test lulus. Kalau kamu
 fork repo ini, **diff dulu sebelum percaya** — aturan yang sama kami pakai ke upstream.
