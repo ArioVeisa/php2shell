@@ -6,23 +6,37 @@ exists so nobody has to guess where each part came from.
 
 ## Upstream research (not ours)
 
+**The CVE is not ours.** CVE-2026-109618 and CVE-2026-109619 were discovered
+and published by **Wiz Research**: [PHP2Shell: AI uncovers critical RCE
+vulnerabilities affecting 70% of the Internet](https://www.wiz.io/blog/php2shell-php-rce).
+Every line of research below starts from that publication. **Calif** ran
+parallel research on the upload-metadata amplification path
+([calif.io](https://calif.io/research/wp2root)).
+
 | Project | Author | What we took | Status |
 |---|---|---|---|
+| **Wiz Research** — PHP2Shell publication | **Wiz Research** | The vulnerability itself: both CVE IDs, the `session.upload_progress` OOM window, and the public analysis everything here depends on. | Public research. Not code. Credit is the whole obligation, and it is owed first. |
 | [`9bie/php2shell-bypass-aslr-exp`](https://github.com/9bie/php2shell-bypass-aslr-exp) | **9bie (Qi Deng)** | The core chain: 2-request `session.upload_progress` UAF (CVE-2026-109619), the ASLR bypass via heap leak + `libphp` base leak, and the `pDestructor = zif_system` actuator. `lib/chain.py` is a **port** of this `exploit.py`'s logic into an in-process module. | No license file published upstream. Ported with explicit credit; see "License status" below. |
+| **Karasawa2025** | **Karasawa2025** | Public research on the `display_errors=Off` direction: the OOM-in-cookie primitive and the alternative leak strategy. Reference for a path we have **not** implemented yet. | Referenced, not vendored. |
 | [`ikow/php2shell-poc`](https://github.com/ikow/php2shell-poc) | **ikow** | The CVE-2026-109618 OOM-trigger verifier (`poc/verify_oom_trigger.py`) used as the reference for our 109618 crash evidence. | Referenced, not vendored. |
 | PHP security advisories | **PHP Group** | `GHSA-w8hw-w9fx-j79w` → CVE-2026-109618, `GHSA-6wmf-4rv5-p3rp` → CVE-2026-109619; the fix-floor table (8.2.35 / 8.3.36 / 8.4.27 / 8.5.12). | Public advisory, factual data. |
 | `curl_cffi` | **lexiforest / yifeikong** | JA3/TLS impersonation used by `lib/transport.py`. | MIT — installed as a dependency, not vendored. |
 
+**Deliberately not credited, because we could not verify them:** `WoYinDao`
+(cited by devploit; no public trace found) and `CVE-2026-115560` (404 at MITRE,
+no NVD record — used as a headline by murrez, not repeated here).
+
 ## What is original to this repo
 
-- Unified CLI with 5 modes (`scan` / `detect` / `preflight` / `exploit` / `shell`)
+- Unified CLI with 7 modes (`scan` / `detect` / `preflight` / `exploit` /
+  `shell` / `version` / `builds`)
 - `lib/chain.py` packaged as an in-process engine (no subprocess, no external
   script), verified function-by-function against the upstream `exploit.py`
 - Auto-proof: reading the command output back from the mounted `out/p1`
 - The command fence (whitelist, 14-byte cap, chaining rejection, no revshell)
 - Preflight scoring model + the "detection is information, not a gate" policy
 - Stealth layer: JA3 profile rotation, jitter, JSONL request audit
-- Test suite (46 tests), installer, Docker lab, GPL-3.0 wrapper
+- Test suite (81 tests), installer, Docker lab, GPL-3.0 wrapper
 
 ## License status (read this)
 

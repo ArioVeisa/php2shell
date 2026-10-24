@@ -15,7 +15,7 @@
 [![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [Sumber repo](#-sumber-repo-bukan-fork-tapi-turunan-beberapa-repo) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [Sumber repo](#-sumber-repo-bukan-fork-tapi-turunan-beberapa-repo) · [Kredit riset](#kredit-riset--siapa-menemukan-siapa-menuliskan) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
@@ -498,6 +498,32 @@ polanya benar.
 | `GHSA-6wmf-4rv5-p3rp` (PHP Group) | CVE-2026-109619 — UAF di `php_session_initialize()` |
 | php.net changelog 8.4.27 | fix-floor 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 |
 
+### Kredit riset — siapa menemukan, siapa menuliskan
+
+Tool ini **tidak mengklaim penemuan CVE**. Yang menemukan adalah **Wiz
+Research**, dan itu harus disebut lebih dulu sebelum nama-nama yang menulis
+kode.
+
+| Nama | Peran |
+|---|---|
+| **Wiz Research** | Penemu dan analis publik PHP2Shell (CVE-2026-109618 / CVE-2026-109619) — [blog](https://www.wiz.io/blog/php2shell-php-rce). Semua yang ada di repo ini bermula dari publikasi itu. |
+| **Calif** | Riset paralel, analisis amplifikasi metadata upload ([calif.io](https://calif.io/research/wp2root)). |
+| **9bie (Qi Deng)** | Exploit publik pertama + riset heap grooming: leak stage-1/2, carrier fake HashTable stage-3. Rantai di `lib/chain.py` adalah port logikanya. |
+| **Karasawa2025** | Arah `display_errors=Off` — primitif OOM-di-cookie dan strategi leak alternatif. |
+| **v.dir.mir** | Menambahkan `--revshell` pada `exploit.py` acuan (commit `5fc5669`). Fitur itu **tidak** kami port. |
+| **Zer061** | Fork tempat `exploit.py` acuan byte-level kami diambil (sha256 `ea925683…`). |
+| **ikow** | Verifikator OOM CVE-2026-109618 (`poc/verify_oom_trigger.py`). |
+| **devploit** | Tabel 13 profil heap → `lib/build_support.py`, dan pola lisensi `bootstrap_upstream.py`. |
+| **PHP Group** | Advisori + perbaikan di 8.4.27 / 8.5.12. |
+
+Kalau ada kredit yang kurang atau keliru, buka issue — itu kalimat devploit,
+dan kami ikut memakainya karena memang begitu seharusnya.
+
+Yang sengaja **tidak** dikutip: `WoYinDao` (disebut devploit, tapi tidak ada
+jejak publik yang bisa kami verifikasi) dan `CVE-2026-115560` (404 di MITRE,
+0 hasil di NVD) — nomor itu dipakai `murrez` sebagai headline, dan tidak kami
+ulang.
+
 ### Kenapa tidak bisa di-fork
 
 Fork = satu garis keturunan git. Di sini:
@@ -509,7 +535,7 @@ Fork = satu garis keturunan git. Di sini:
 - semantik versi & fix-floor dari **advisori PHP Group** (bukan repo);
 
 Tidak ada satu pun dari mereka yang bisa jadi "parent" tunggal. Yang kami tulis
-sendiri: CLI 6 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
+sendiri: CLI 7 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
 pagar perintah, skor preflight, mode stealth, 81 unit test, installer, lab Docker.
 
 ### Kenapa `--revshell` tidak ada di sini
@@ -738,6 +764,15 @@ is intentional — this toolkit proves impact; it does not weaponize beyond proo
 ---
 
 <div align="center">
-<sub>research credit: 9bie (Qi Deng) — original php2shell-bypass-aslr-exp ·
-reproduction, tooling & hardening by <b>aarsaputra</b></sub>
+<sub><b>Penemu CVE:</b> Wiz Research — PHP2Shell (CVE-2026-109618 / CVE-2026-109619) ·
+Calif — amplifikasi metadata upload<br>
+<b>Kode &amp; riset yang jadi dasar:</b> 9bie (Qi Deng) — exploit publik &amp; heap grooming ·
+Karasawa2025 — arah <code>display_errors=Off</code> ·
+v.dir.mir — <code>--revshell</code> pada acuan ·
+Zer061 — fork acuan <code>exploit.py</code> ·
+ikow — verifikator OOM ·
+devploit — tabel 13 profil heap<br>
+<b>Advisori &amp; perbaikan:</b> PHP Group — GHSA-w8hw-w9fx-j79w / GHSA-6wmf-4rv5-p3rp<br>
+reproduction, tooling &amp; hardening by <b>aarsaputra</b><br>
+<sub>Kredit kurang atau keliru? Buka issue.</sub></sub>
 </div>
