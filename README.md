@@ -764,8 +764,9 @@ is intentional — this toolkit proves impact; it does not weaponize beyond proo
 ---
 
 <div align="center">
-<sub><b>Penemu CVE:</b> Wiz Research — PHP2Shell (CVE-2026-109618 / CVE-2026-109619) ·
-Calif — amplifikasi metadata upload<br>
+<sub><b>Penemu CVE:</b> Calif (Ryan A.) — temuan pertama 1 Agu 2026, lapor 11 Agu ·
+Wiz Research — temuan independen 19 Agu 2026 ·
+OpenAI Codex Security (Amy Burnett) — vektor tambahan, lapor 18 Sep 2026<br>
 <b>Kode &amp; riset yang jadi dasar:</b> 9bie (Qi Deng) — exploit publik &amp; heap grooming ·
 Karasawa2025 — arah <code>display_errors=Off</code> ·
 v.dir.mir — <code>--revshell</code> pada acuan ·

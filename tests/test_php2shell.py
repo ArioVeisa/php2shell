@@ -265,7 +265,7 @@ class TestKlaimBanner(unittest.TestCase):
             now = hashlib.sha256(fh.read()).hexdigest()
         # hash ini TERVERIFIKASI saat pemisahan repo (23 Okt 2026)
         self.assertEqual(now,
-            "276d1e494e5e579c48923ee5c9d476d5d98d9d3943780641097c7d833bd0039e",
+            "567fc91cd843b2ae6ebf9cb31ef61261649e18ab9faa32a4b19e2ad07a9ecff1",
             "lib/chain.py berubah — perbarui hash ini setelah review")
 
 

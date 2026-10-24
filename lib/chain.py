@@ -3,9 +3,12 @@
 lib/chain.py — mesin rantai eksploitasi CVE-2026-109619.
 
 ATRIBUSI (WAJIB DIBACA — lihat ATTRIBUTION.md):
-  CVE-2026-109618 / CVE-2026-109619 ditemukan dan dipublikasikan oleh
-  Wiz Research ("PHP2Shell", wiz.io/blog/php2shell-php-rce). Riset mereka
-  adalah dasar dari semua yang ada di file ini.
+  CVE-2026-109618 / CVE-2026-109619 ("PHP2Shell") ditemukan pertama oleh
+  Calif (Ryan A.) pada 1 Agustus 2026 dan dilaporkan ke PHP 11 Agustus
+  2026. Wiz Research menemukannya secara independen (19 Agustus, lapor
+  24 Agustus) — wiz.io/blog/php2shell-php-rce. OpenAI Codex Security
+  melaporkan vektor tambahan 18 September. Ketiganya dikreditkan di
+  advisori PHP. Riset mereka adalah dasar dari semua yang ada di file ini.
   Teknik rantai di file ini BUKAN karya kami. Ini port dari riset publik
   9bie (Qi Deng) — github.com/9bie/php2shell-bypass-aslr-exp — yang
   mempublikasikan exploit.py untuk CVE-2026-109619 (2-request

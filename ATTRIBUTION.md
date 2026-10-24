@@ -6,16 +6,28 @@ exists so nobody has to guess where each part came from.
 
 ## Upstream research (not ours)
 
-**The CVE is not ours.** CVE-2026-109618 and CVE-2026-109619 were discovered
-and published by **Wiz Research**: [PHP2Shell: AI uncovers critical RCE
-vulnerabilities affecting 70% of the Internet](https://www.wiz.io/blog/php2shell-php-rce).
-Every line of research below starts from that publication. **Calif** ran
-parallel research on the upload-metadata amplification path
-([calif.io](https://calif.io/research/wp2root)).
+**The CVE is not ours.** CVE-2026-109618 and CVE-2026-109619 were reported
+to PHP by **three parties**, and the credit order matters:
+
+| Party | First finding | Reported to PHP |
+|---|---|---|
+| **Calif (Ryan A.)** — found it **first** | 1 Aug 2026 | 11 Aug 2026 (first bug), 21 Aug (second) |
+| **Wiz Research** — independent discovery | 19 Aug 2026 | 24 Aug 2026 |
+| **OpenAI Codex Security (Amy Burnett)** — additional vectors | not stated | 18 Sep 2026 |
+
+Per the PHP Foundation's release post, Calif reported first; Wiz found the
+same bug class independently a few weeks later. PHP's own GitHub advisories
+credit all three. Fixed releases shipped 21 Oct 2026.
+
+Sources: [PHP Foundation release post](https://thephp.foundation/blog/2026/10/21/todays-php-security-release-and-how-were-strengthening-php-security/) ·
+[Wiz Research — PHP2Shell](https://www.wiz.io/blog/php2shell-php-rce) ·
+[Calif — PHP2Shell](https://calif.io/php2shell.x/)
 
 | Project | Author | What we took | Status |
 |---|---|---|---|
-| **Wiz Research** — PHP2Shell publication | **Wiz Research** | The vulnerability itself: both CVE IDs, the `session.upload_progress` OOM window, and the public analysis everything here depends on. | Public research. Not code. Credit is the whole obligation, and it is owed first. |
+| **Calif (Ryan A.)** — first finding | **Calif** | The original trigger on the upload-metadata amplification path, reported 11 Aug 2026. Earlier dated than any other report. | Public research. Not code. Credit owed first. |
+| **Wiz Research** — PHP2Shell publication | **Wiz Research** | Independent discovery of both CVEs and the public analysis everything here depends on. | Public research. Not code. |
+| **OpenAI Codex Security** | **Amy Burnett** | Additional attack vectors reported to PHP, 18 Sep 2026. | Public research. Not code. |
 | [`9bie/php2shell-bypass-aslr-exp`](https://github.com/9bie/php2shell-bypass-aslr-exp) | **9bie (Qi Deng)** | The core chain: 2-request `session.upload_progress` UAF (CVE-2026-109619), the ASLR bypass via heap leak + `libphp` base leak, and the `pDestructor = zif_system` actuator. `lib/chain.py` is a **port** of this `exploit.py`'s logic into an in-process module. | No license file published upstream. Ported with explicit credit; see "License status" below. |
 | **Karasawa2025** | **Karasawa2025** | Public research on the `display_errors=Off` direction: the OOM-in-cookie primitive and the alternative leak strategy. Reference for a path we have **not** implemented yet. | Referenced, not vendored. |
 | [`ikow/php2shell-poc`](https://github.com/ikow/php2shell-poc) | **ikow** | The CVE-2026-109618 OOM-trigger verifier (`poc/verify_oom_trigger.py`) used as the reference for our 109618 crash evidence. | Referenced, not vendored. |
