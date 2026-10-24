@@ -288,12 +288,71 @@ Perilaku:
   sebagai gate CI).
 
 ```
-[OK]   lokal   : 1.2
-      remote  : 1.2  (sumber: branch)
+[OK]   lokal   : 1.3.0
+      remote  : 1.3.0  (sumber: branch)
       status  : current
-      pesan   : php2shell 1.2 — sudah versi terbaru
+      pesan   : php2shell 1.3.0 — sudah versi terbaru
       repo    : https://github.com/aarsaputra/php2shell
 ```
+
+### `builds` — build mana yang benar-benar bisa di-RCE
+
+Ini menjawab pertanyaan yang paling sering salah dijawab: **"target ini bisa
+di-RCE atau cuma bisa dibocorkan?"** Sebelum versi 1.3.0, `preflight` memberi
+`READY` untuk build apa pun yang lolos cek versi — padahal PHP 8.3.x terbukti
+hanya bisa sampai stage leak.
+
+```bash
+php2shell.py builds                 # seluruh tabel
+php2shell.py builds --level rce     # hanya yang RCE-nya terbukti
+php2shell.py builds --json out/b.json
+```
+
+```
+  PHP       arch      dukungan  catatan
+  8.5.11    amd64     RCE       separate offsets, same htdata
+  8.5.11    aarch64   RCE       uid=33(www-data)
+  8.5.10    aarch64   RCE       uid=33(www-data)
+  8.4.26    amd64     RCE       build referensi lab kita; RCE terbukti disini
+  8.4.25    aarch64   RCE       stage 3 probabilistik — butuh retry
+  8.5.0     any       LEAK      stage-3 layout tidak ditemukan
+  8.3.35    aarch64   LEAK      stage-3 reference hidup, RCE tidak
+  8.3.33    amd64     LEAK      wordpress:7.1.1-apache mod_php
+  8.3.0     aarch64   NO        PS(id) dangling; cookie tidak reclaimed
+  8.2.34    aarch64   NO        UAF ada; bentuk leak berbeda
+  8.1.34    aarch64   NO        UAF ada; bentuk leak berbeda
+  8.0.30    aarch64   NO        UAF ada; bentuk leak berbeda
+  7.4.33    aarch64   NO        UAF ada; bentuk leak berbeda
+
+  total 13 build: 5 RCE, 3 leak-saja, 5 belum terbukti
+```
+
+Arti kolom `dukungan`:
+
+| Nilai | Arti | Yang terjadi saat exploit |
+|---|---|---|
+| `RCE` | stage 1+2+3 terbukti di build persis itu | perintah benar-benar dieksekusi, `PROOF` muncul |
+| `LEAK` | stage 1+2 terbukti, stage 3 tidak | berhenti setelah bocoran alamat; perintah **tidak** dieksekusi |
+| `NO` | belum pernah terbukti bisa dilanjutkan | kemungkinan berhenti di stage 1-2 |
+| `?` | build tidak ada di tabel | dicoba dengan offset default; anggap belum pasti |
+
+Tabel ini juga muncul otomatis di `preflight` sebagai baris `dukungan :` dan di
+kolom ke-3 tabel `scan`/`detect` — jadi keputusan tembak diambil **sebelum**
+rantai dijalankan, bukan setelah menunggu 200 detik kegagalan.
+
+Dua hal yang perlu ditegaskan:
+
+- **Arsitektur menentukan.** `8.4.26` RCE di `amd64`, tapi hanya `LEAK` di
+  `aarch64`. Kalau arsitektur target tidak terbaca, tool memakai entri RCE
+  sebagai perkiraan — dengan catatan bahwa arsitektur menentukan hasil.
+- **`NO` bukan "mustahil".** Itu kata penulis tabel aslinya, dan kita ikut
+  apa adanya. Offset bisa dipasok manual lewat `--zif-offset` / `--dtor-offset`.
+  Kalau kamu punya build yang tidak ada di tabel tapi RCE-nya jalan, itu temuan
+  baru — bukan kesalahan tabel.
+
+Sumber tabel: `devploit/php2shell` (13 profil heap, 5 RCE terverifikasi),
+`9bie/php2shell-bypass-aslr-exp` (worker pinning di stock image), dan lab kita
+sendiri (`php:8.4.26-apache`). Tidak ada angka yang dikarang.
 
 ### Flag global (berlaku semua mode)
 
@@ -358,6 +417,23 @@ di sini, bukan lewat mekanisme "forked from".
 | 3 | `https://github.com/ikow/php2shell-poc` | **ikow** | Verifikator crash CVE-2026-109618 (`poc/verify_oom_trigger.py`). | dirujuk, tidak di-vendor |
 | 4 | `curl_cffi` — `https://github.com/lexiforest/curl_cffi` | lexiforest / yifeikong | JA3/TLS impersonation di `lib/transport.py`. | MIT (dependency) |
 
+### Dua repo pembanding (dibaca, tidak di-vendor)
+
+Dua repo ini **tidak** kami ambil kodenya — dibaca untuk pembanding, dan satu
+di antaranya menyumbang **data** yang kami adopsi (tabel dukungan build).
+Disebut di sini supaya jelas mana yang kode dan mana yang pengukuran.
+
+| Repo | Yang kami ambil | Yang TIDAK kami ambil |
+|---|---|---|
+| `https://github.com/devploit/php2shell` (devploit, MIT) | **Tabel 13 profil heap** → `lib/build_support.py`: build mana yang RCE, mana yang cuma leak, per arsitektur. Ini pengukuran mereka, dan mereka dikreditkan di header modul. | Kode. Juga **tidak** kami ikut menyebut `CVE-2026-115560` — nomor itu tidak ada di MITRE/NVD/daftar advisori `php/php-src`. |
+| `https://github.com/murrez/php2shell` (murrez, MIT) | Tidak ada yang diadopsi ke kode. | Kode. `poc.py` 4.411 baris tidak di-vendor; klaim `CVE-2026-115560` sebagai "headline" tidak kami ulang. |
+
+Yang menarik dari `devploit` dan kami catat di `ATTRIBUTION.md`: mereka
+menyelesaikan masalah lisensi 9bie dengan cara **tidak** menyalin kode sama
+sekali — `bootstrap_upstream.py` hanya meng-clone commit tertentu saat runtime.
+Kami tidak bisa memakai jalan itu (mesin rantai harus jalan offline), tapi
+polanya benar.
+
 ### Advisori & data resmi
 
 | Sumber | Yang diambil |
@@ -377,8 +453,8 @@ Fork = satu garis keturunan git. Di sini:
 - semantik versi & fix-floor dari **advisori PHP Group** (bukan repo);
 
 Tidak ada satu pun dari mereka yang bisa jadi "parent" tunggal. Yang kami tulis
-sendiri: CLI 5 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
-pagar perintah, skor preflight, mode stealth, 46 unit test, installer, lab Docker.
+sendiri: CLI 6 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
+pagar perintah, skor preflight, mode stealth, 65 unit test, installer, lab Docker.
 
 ### Kenapa `--revshell` tidak ada di sini
 
@@ -554,7 +630,7 @@ commands, no shells, no exfil primitives) reflects that scope.
 | Command fence | 16 negative test cases, rejected **before** any network I/O |
 | `--revshell` | blocked at runner level (exit 2), not just parser |
 | Multi-target mode | dedupe, auto-https, JSON/CSV verified live |
-| 46 unit tests | `python -m unittest discover -s tests -t .` → OK |
+| 65 unit tests | `python -m unittest discover -s tests -t .` → OK |
 
 ---
 
@@ -570,13 +646,14 @@ php2shell/
 │   ├── transport.py      curl_cffi JA3 transport + rate limit + audit log
 │   ├── detect.py         fingerprint: version, SAPI, upload_progress…
 │   ├── preflight.py      readiness score; detection ≠ gate
+│   ├── build_support.py  tabel RCE / leak-saja / belum-terbukti per build
 │   ├── exploit_runner.py orchestration + command fence + auto-proof
 │   ├── reporter.py       JSON / CSV / terminal tables
 │   └── banner.py         the skull ASCII
 ├── shell/                password-protected webshell GENERATOR
 ├── lab/lab_docker.sh     author-config vulnerable lab, one command
 ├── docker/               php.ini / apache.conf / www / offsets.py
-├── tests/                46 unit tests
+├── tests/                65 unit tests
 └── gambar/               screenshot
 ```
 

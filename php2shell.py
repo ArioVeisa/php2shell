@@ -71,7 +71,7 @@ CVE_CHOICES = ("CVE-2026-109618", "CVE-2026-109619")
 # 109618 "OOM corruption" adalah bug SATU request yang konsumennya shutdown
 # procedure; tool ini tidak mengimplementasikannya.
 CVE_SUPPORTED = ("CVE-2026-109619",)
-VERSION = "1.2"
+VERSION = "1.3.0"
 
 
 # ---------------------------------------------------------------- banner ----
@@ -159,8 +159,10 @@ def _line(rec: dict) -> str:
     d, p = rec["detect"], rec["preflight"]
     ver = d.get("php_version") or d.get("branch") or "?"
     tag = "READY" if p["ready"] else "  -  "
+    lvl = {"rce": "RCE", "leak": "LEAK", "no": "NO"}.get(
+        (p.get("support") or {}).get("level", ""), "?")
     return (
-        f"{d['verdict']:<10} | {ver:<8} | up={d['upload_progress']:<7} | "
+        f"{d['verdict']:<10} | {ver:<8} | {lvl:<4} | up={d['upload_progress']:<7} | "
         f"disp={d['display_errors']:<7} | score={p['score']:>2}/{p['max_score']} | {tag}"
     )
 
@@ -288,6 +290,12 @@ def cmd_preflight(args) -> int:
         print(f"  catatan: {n}")
     print()
     print(f"skor         : {p['score']}/{p['max_score']}")
+    sup = p.get("support") or {}
+    lvl_label = {"rce": "RCE", "leak": "LEAK SAJA", "no": "BELUM TERBUKTI",
+                 "unknown": "TIDAK DIKETAHUI"}.get(sup.get("level", ""), "?")
+    print(f"dukungan     : {lvl_label}")
+    if sup.get("text"):
+        print(f"               {sup['text']}")
     print(f"siap exploit : {'YA' if p['ready'] else 'TIDAK'}")
     if args.json:
         print(f"json: {reporter.write_json(args.json, [rec], {'mode': 'preflight', 'cve': CVE_IDS})}")
@@ -588,6 +596,41 @@ class SubHelp(argparse.RawDescriptionHelpFormatter):
     pass
 
 
+def cmd_builds(args) -> int:
+    """Tampilkan tabel build yang didukung. Read-only, tidak menyentuh jaringan."""
+    from lib import build_support as bs
+
+    rows = bs.table_rows()
+    if getattr(args, "level", None):
+        rows = [r for r in rows if r["level"] == args.level]
+
+    label = {"rce": "RCE", "leak": "LEAK", "no": "NO"}
+    print(f"  {'PHP':<9} {'arch':<9} {'dukungan':<9} catatan")
+    print(f"  {'-'*9} {'-'*9} {'-'*9} {'-'*45}")
+    for r in rows:
+        print(f"  {r['version']:<9} {r['arch']:<9} {label[r['level']]:<9} {r['note']}")
+    print()
+    n_rce = sum(1 for r in bs.table_rows() if r["level"] == "rce")
+    n_leak = sum(1 for r in bs.table_rows() if r["level"] == "leak")
+    n_no = sum(1 for r in bs.table_rows() if r["level"] == "no")
+    print(f"  total {len(bs.table_rows())} build: {n_rce} RCE, {n_leak} leak-saja, {n_no} belum terbukti")
+    print("  RCE = stage 1-3 terbukti (perintah benar-benar jalan).")
+    print("  LEAK = hanya bocoran alamat; stage 3 tidak jalan, perintah TIDAK dieksekusi.")
+    print("  NO = belum pernah terbukti. Bukan berarti mustahil, tapi jangan diandalkan.")
+    print("  Sumber: devploit/php2shell (13 profil), 9bie/php2shell-bypass-aslr-exp, lab lokal.")
+
+    if getattr(args, "json", None):
+        import json as _json
+        p = Path(args.json)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(_json.dumps(
+            {"builds": bs.table_rows(), "total": len(bs.table_rows()),
+             "counts": {"rce": n_rce, "leak": n_leak, "no": n_no}},
+            indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"\n  json -> {p}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Flag global memakai parser induk supaya bisa ditaruh SEBELUM **atau**
     # SESUDAH subcommand. Tanpa ini, `scan -l x.txt --json out.json` gagal
@@ -672,6 +715,15 @@ def build_parser() -> argparse.ArgumentParser:
                                 "  php2shell.py version\n"
                                 "  php2shell.py version --json out/version.json\n"))
     vp.add_argument("--no-cache", action="store_true", help="abaikan cache 1 jam, cek ulang ke GitHub")
+
+    bp = sub.add_parser("builds", parents=[common], formatter_class=SubHelp, prog="php2shell builds",
+                        help="tabel build PHP yang didukung: RCE / leak-saja / belum terbukti",
+                        epilog=("contoh:\n"
+                                "  php2shell.py builds\n"
+                                "  php2shell.py builds --level rce\n"
+                                "  php2shell.py builds --json out/builds.json\n"))
+    bp.add_argument("--level", choices=["rce", "leak", "no"], default=None,
+                    help="saring per tingkat dukungan")
     return ap
 
 
@@ -745,6 +797,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_shell(args)
         if args.mode == "version":
             return cmd_version(args)
+        if args.mode == "builds":
+            return cmd_builds(args)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

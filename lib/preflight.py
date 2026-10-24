@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .detect import Detection
+from . import build_support
 
 # Pra-syarat yang dibaca langsung dari header komentar exploit.py (baris 1-48).
 # Catatan: exploit.py menyebut display_errors=1, tetapi jalur leak tool ini ada di
@@ -32,6 +33,11 @@ class Preflight:
     checks: dict[str, str] = field(default_factory=dict)
     blockers: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # Tingkat dukungan build (RCE / LEAK / NO / UNKNOWN) + kalimat penjelas.
+    # Ini yang membedakan "target ini bisa di-RCE" dari "target ini cuma bisa
+    # dibocorkan" — sebelumnya preflight menyebut keduanya READY.
+    support_level: str = build_support.UNKNOWN
+    support_text: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -39,6 +45,7 @@ class Preflight:
             "score": self.score,
             "max_score": self.max_score,
             "ready": self.ready,
+            "support": {"level": self.support_level, "text": self.support_text},
             "checks": self.checks,
             "blockers": self.blockers,
             "notes": self.notes,
@@ -118,6 +125,26 @@ def preflight(d: Detection) -> Preflight:
         p.checks["display_errors"] = "TIDAK DIKETAHUI"
 
     p.score = min(pts, p.max_score)
+
+    # --- dukungan build (RCE vs LEAK vs belum terbukti) ---
+    # Ini BUKAN blocker: build yang tidak ada di tabel tetap dicoba, karena
+    # offset bisa dipasok operator lewat --zif-offset/--dtor-offset. Tapi
+    # operator berhak tahu peluang sebenarnya SEBELUM menembak.
+    p.support_level = build_support.level_for(d.php_version, getattr(d, "arch", None))
+    p.support_text = build_support.expectation_text(d.php_version, getattr(d, "arch", None))
+    if p.support_level == build_support.LEAK:
+        p.notes.append(
+            "build ini hanya terbukti sampai stage leak — stage 3 (fake "
+            "HashTable -> zif_system) tidak jalan. Perintah TIDAK akan "
+            "dieksekusi; berhenti setelah bocoran alamat."
+        )
+    elif p.support_level == build_support.NO:
+        p.notes.append(
+            "build ini belum pernah terbukti bisa dilanjutkan sama sekali. "
+            "Rantai kemungkinan berhenti di stage 1-2; siapkan offset manual "
+            "kalau tetap ingin mencoba."
+        )
+
     # Aturan READY (revisi 23 Okt 2026): HANYA blocker keras yang menahan.
     # Blocker = target tak terjangkau, atau versi TERBACA sudah-patch.
     # Skor rendah / "tidak diketahui" TIDAK menahan — exploit tetap jalan;
@@ -132,8 +159,12 @@ def preflight(d: Detection) -> Preflight:
 def verdict_line(d: Detection, p: Preflight) -> str:
     """Satu baris untuk tabel terminal."""
     ver = d.php_version or (d.branch or "?")
+    # Kolom ke-2: tingkat dukungan build. Ini yang membedakan target yang
+    # benar-benar bisa di-RCE dari target yang cuma bisa dibocorkan.
+    lvl = {"rce": "RCE", "leak": "LEAK", "no": "NO", "unknown": "?"}.get(
+        p.support_level, "?")
     return (
-        f"{d.verdict:<10} | {ver:<8} | up={d.upload_progress:<7} | "
+        f"{d.verdict:<10} | {ver:<8} | {lvl:<4} | up={d.upload_progress:<7} | "
         f"disp={d.display_errors:<7} | score={p.score:>2}/{p.max_score} | "
         f"{'READY' if p.ready else 'NO'}"
     )

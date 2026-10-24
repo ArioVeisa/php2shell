@@ -14,7 +14,7 @@ import sys
 import tempfile
 import unittest
 
-VERSI_DIHARAPKAN = "1.2"
+VERSI_DIHARAPKAN = "1.3.0"
 TOOLKIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(TOOLKIT, "php2shell.py")
 PY = sys.executable
@@ -249,7 +249,8 @@ class TestKlaimBanner(unittest.TestCase):
                          "exploit_runner.py masih memanggil subprocess.run")
 
         # Bukti positif: mesin rantai internal benar-benar dipakai.
-        src = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
         self.assertIn("chain_mod", src,
                       "exploit_runner.py tidak memakai mesin rantai internal")
 
@@ -395,6 +396,101 @@ class TestCekVersi(unittest.TestCase):
         rc, out, err = run("detect", "--help", timeout=60)
         self.assertEqual(rc, 0)
         self.assertIn("--check-version", out)
+
+
+
+class TestBuildSupport(unittest.TestCase):
+    """Tabel dukungan build: membedakan RCE / leak-saja / belum terbukti."""
+
+    def test_known_rce_build(self):
+        from lib import build_support as bs
+        self.assertEqual(bs.level_for("8.4.26", "amd64"), bs.RCE)
+        self.assertEqual(bs.level_for("8.5.11", "aarch64"), bs.RCE)
+
+    def test_leak_only_build_never_claims_rce(self):
+        from lib import build_support as bs
+        # 8.3.35 terbukti bocor, TAPI stage 3 tidak jalan. Ini kelas yang
+        # dulu disalah-READY-kan oleh preflight.
+        b = bs.lookup("8.3.35", "aarch64")
+        self.assertIsNotNone(b)
+        self.assertEqual(b.level, bs.LEAK)
+        self.assertFalse(b.can_rce)
+        self.assertTrue(b.can_leak)
+
+    def test_arch_matters(self):
+        from lib import build_support as bs
+        # RCE terbukti di amd64 saja -> aarch64 tidak boleh dijanjikan RCE
+        self.assertEqual(bs.level_for("8.4.26", "amd64"), bs.RCE)
+        self.assertEqual(bs.level_for("8.4.26", "aarch64"), bs.LEAK)
+
+    def test_unknown_build_is_unknown_not_rce(self):
+        from lib import build_support as bs
+        self.assertEqual(bs.level_for("8.4.27"), bs.UNKNOWN)
+        self.assertEqual(bs.level_for("9.9.9"), bs.UNKNOWN)
+        self.assertEqual(bs.level_for(None), bs.UNKNOWN)
+
+    def test_version_normalisation(self):
+        from lib import build_support as bs
+        for raw in ("v8.4.26", "8.4.26-apache", "8.4.26 ", "8.4.26RC1"):
+            self.assertEqual(bs.level_for(raw, "amd64"), bs.RCE, raw)
+
+    def test_eol_detection(self):
+        from lib import build_support as bs
+        self.assertTrue(bs.is_eol("7.4.33"))
+        self.assertTrue(bs.is_eol("8.1.34"))
+        self.assertTrue(bs.is_eol("8.0.30"))
+        self.assertFalse(bs.is_eol("8.4.26"))
+        self.assertFalse(bs.is_eol(None))
+
+    def test_expectation_text_never_promises_rce_on_leak(self):
+        from lib import build_support as bs
+        txt = bs.expectation_text("8.3.35", "aarch64")
+        self.assertIn("LEAK", txt)
+        self.assertNotIn("RCE terbukti", txt)
+
+
+class TestPreflightSupportField(unittest.TestCase):
+    """Preflight harus membawa tingkat dukungan, bukan cuma READY."""
+
+    def _mk(self, version):
+        from lib.detect import Detection
+        from lib import preflight as pf
+        d = Detection(url="http://ex/")
+        d.php_version = version
+        d.branch = version.rsplit(".", 1)[0] if version else None
+        d.verdict = "vulnerable"
+        d.upload_progress = "on"
+        d.display_errors = "off"
+        d.reachable = True
+        d.status = 200
+        return pf.preflight(d)
+
+    def test_rce_build_reports_rce(self):
+        p = self._mk("8.4.26")
+        self.assertEqual(p.support_level, "rce")
+        self.assertEqual(p.as_dict()["support"]["level"], "rce")
+
+    def test_leak_build_warns_command_not_executed(self):
+        p = self._mk("8.3.35")
+        self.assertEqual(p.support_level, "leak")
+        joined = " ".join(p.notes).lower()
+        self.assertIn("tidak akan", joined)
+        self.assertIn("dieksekusi", joined)
+
+    def test_support_never_blocks(self):
+        # Dukungan rendah BUKAN blocker: offset manual masih bisa dipakai.
+        p = self._mk("8.3.35")
+        self.assertFalse(any("build" in b.lower() for b in p.blockers))
+
+    def test_verdict_line_has_support_column(self):
+        from lib import preflight as pf
+        p = self._mk("8.4.26")
+        from lib.detect import Detection
+        d = Detection(url="http://ex/")
+        d.php_version, d.branch, d.verdict = "8.4.26", "8.4", "vulnerable"
+        d.upload_progress, d.display_errors = "on", "off"
+        line = pf.verdict_line(d, p)
+        self.assertIn("RCE", line)
 
 
 if __name__ == "__main__":

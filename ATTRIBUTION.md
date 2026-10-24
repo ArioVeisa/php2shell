@@ -45,6 +45,39 @@ substantially a port of it. The honest position is:
 If you are reusing this repo and you care about license hygiene, that
 distinction matters: **do not represent `lib/chain.py` as purely our work.**
 
+### How `devploit/php2shell` solves the same problem
+
+We are not the only project that hit this. `devploit/php2shell` (MIT) faced the
+same unlicensed-upstream problem with 9bie and chose a different, arguably
+cleaner route — worth recording because it is the pattern a future
+`lib/chain.py` rewrite should follow:
+
+> "That repository has no explicit license file. For that reason: its source is
+> **not vendored here**; no patch file containing its code is redistributed;
+> `bootstrap_upstream.py` only **clones the pinned commit**."
+
+In other words: at runtime, fetch the upstream code from upstream itself at a
+pinned commit. Then the redistributed repo contains **zero** lines of
+unlicensed code, and the license question never arises for the artifact you
+ship.
+
+Our situation differs in one way: `lib/chain.py` is not a thin wrapper, it is
+the engine — it cannot be "fetched at runtime" without turning a self-contained
+tool into something that needs network access to run at all. That is worse for
+the user. So we keep the port and stay honest about it in this file, and the
+clean-room rewrite remains the planned fix. What we will **not** do is describe
+the port as original work.
+
+Two things we deliberately did *not* copy from that comparison:
+
+- They list `CVE-2026-115560` as a headline feature. We checked
+  `cveawg.mitre.org/api/cve/CVE-2026-115560` → **404**, NVD → **0 results**,
+  and the `php/php-src` advisory list → absent (only 109618 and 109619 exist).
+  That ID appears to be invented. We do not reference it.
+- We adopt their **support-level matrix** (which builds reach RCE vs. only
+  leak) because it is their *measurement*, creditable and useful — see
+  `lib/build_support.py`. Factual data is attributed; it is not code copying.
+
 ## Ethical position
 
 This toolkit proves *access*, not *damage*. Commands are capped at 14 bytes,

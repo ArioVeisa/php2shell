@@ -28,7 +28,7 @@ TAGLINE = (
 )
 
 USAGE_HINT = (
-    "  mode       : scan  |  detect  |  preflight  |  exploit  |  shell\n"
+    "  mode       : scan  |  detect  |  preflight  |  exploit  |  shell  |  version\n"
     "  cepat      : php2shell.py scan -l targets.txt\n"
     "  bantuan    : php2shell.py --help\n"
 )
@@ -98,12 +98,23 @@ def _rule(ch: str = "-") -> str:
 
 
 def render(mode: str = "", profile: str = "", delay: float = 0.0,
-           stealth: bool = True, version: str = "1.2") -> str:
+           stealth: bool = True, version: str | None = None) -> str:
     c = C(_use_color())
+    if version is None:
+        # Satu sumber kebenaran: VERSION di php2shell.py. Kalau render() dipanggil
+        # tanpa argumen eksplisit, baca dari modul induk supaya tidak pernah
+        # menampilkan versi palsu/basi.
+        version = ""
+        for name in ("php2shell", "__main__"):
+            mod = sys.modules.get(name)
+            v = getattr(mod, "VERSION", None) if mod else None
+            if v:
+                version = v
+                break
     out = []
     out.append(art(c))
     out.append("  " + c.bold(c.white("P H P 2 S H E L L")) +
-               c.dim(f"  v{version}") + c.grey("  -  toolkit terpadu"))
+               c.dim(f"  v{version}" if version else "") + c.grey("  -  toolkit terpadu"))
     out.append(c.grey("  " + "-" * _WIDTH))
     out.append(c.yellow("  CVE-2026-109618") + c.white("  +  ") +
                c.yellow("CVE-2026-109619") + c.white("   CVSS 9.2  unauth RCE  PHP 5.4-8.x"))
