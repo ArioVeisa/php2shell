@@ -40,6 +40,7 @@ ROOT = HERE                 # repo baru: shell/ dan docker/ tinggal di sini
 sys.path.insert(0, str(HERE))
 
 from lib import banner as banner_mod  # noqa: E402
+from lib import advisory as advisory_mod  # noqa: E402
 from lib import detect as detect_mod  # noqa: E402
 from lib import preflight as preflight_mod  # noqa: E402
 from lib import reporter  # noqa: E402
@@ -227,8 +228,9 @@ def _add_exploit_flags(p: argparse.ArgumentParser, single: bool) -> None:
                    help="jangan rotate worker sebelum preflight")
     g.add_argument("--no-retry-rotate", action="store_true",
                    help="jangan rotate worker saat retry")
-    g.add_argument("--proof-file", default=None,
-                   help="simpan bukti ke file ini")
+    g.add_argument("--proof-file", default=None, metavar="NAME",
+                   help=("tulis bukti ke /out/NAME di target lalu bacakan "
+                         "(setara -c 'id>/out/NAME'; nama: huruf/angka/_/-, maks 24)"))
     g.add_argument("--output-file", default=None,
                    help="file output exploit.py (-o/--output)")
     g.add_argument("--quiet", action="store_true",
@@ -328,7 +330,23 @@ def _run_exploits(candidates: list[dict], args) -> None:
         print(f"  {e}")
         return
 
-    why = validate_command(args.cmd)
+    # --proof-file NAME → cmd `id>/out/NAME`. Dulu flag ini hanya deklarasi
+    # argparse tanpa efek: cmd tetap 'id', proof_mode=False, hasil selalu
+    # BLIND. Sekarang ia benar-benar membentuk perintah proof + kanal baca.
+    cmd = args.cmd
+    proof_name = getattr(args, "proof_file", None)
+    if proof_name:
+        try:
+            from lib.exploit_runner import proof_cmd_for
+            cmd = proof_cmd_for(args.cmd, proof_name)
+        except ValueError as e:
+            for r in candidates:
+                r["exploit"] = {"success": False, "error": str(e)}
+            print(f"  {e}")
+            return
+        args.cmd = cmd
+
+    why = validate_command(cmd)
     if why:
         for r in candidates:
             r["exploit"] = {"success": False, "error": why}
@@ -357,6 +375,7 @@ def _run_exploits(candidates: list[dict], args) -> None:
                 no_pre_rotate=args.no_pre_rotate,
                 no_retry_rotate=args.no_retry_rotate,
                 fetch=args.fetch or "",
+                proof_file=proof_name,
                 timeout=args.timeout or 15.0,
                 max_total_timeout=args.exploit_timeout,
                 quiet=not args.verbose,
@@ -548,6 +567,9 @@ def cmd_version(args) -> int:
         VERSION,
         use_cache=not getattr(args, "no_cache", False),
     )
+    if getattr(args, "advisories", False):
+        print(advisory_mod.describe())
+        print()
     mark = {"current": "[OK]  ", "behind": "[BARU]", "ahead": "[DEV] ", "unknown": "[?]   "}[vc.status]
     print(f"{mark} lokal   : {vc.local}")
     print(f"      remote  : {vc.remote or '-'}" + (f"  (sumber: {vc.remote_source})" if vc.remote_source else ""))
@@ -724,6 +746,8 @@ def build_parser() -> argparse.ArgumentParser:
                                 "  php2shell.py version\n"
                                 "  php2shell.py version --json out/version.json\n"))
     vp.add_argument("--no-cache", action="store_true", help="abaikan cache 1 jam, cek ulang ke GitHub")
+    vp.add_argument("--advisories", action="store_true",
+                    help="tampilkan fakta pasca-rilis: CVE ketiga, patch di-build ulang, peringatan mitigasi")
 
     bp = sub.add_parser("builds", parents=[common], formatter_class=SubHelp, prog="php2shell builds",
                         help="tabel build PHP yang didukung: RCE / leak-saja / belum terbukti",

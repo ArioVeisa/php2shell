@@ -3,6 +3,35 @@
 Dokumen ini ditulis dari percobaan langsung, bukan dari membaca kode orang.
 Setiap baris di tabel bawah punya container dan perintah yang bisa diulang.
 
+## Prasyarat versi: fix-floor dan tanggal sebenarnya
+
+Rantai ini hanya sah untuk build **di bawah** fix-floor. Angka di bawah
+diambil dari advisory php.net, bukan dari ingatan:
+
+| Cabang | Terakhir rentan | Fix-floor |
+|---|---|---|
+| 8.5 | 8.5.11 | **8.5.12** |
+| 8.4 | 8.4.26 | **8.4.27** |
+| 8.3 | 8.3.35 | **8.3.36** |
+| 8.2 | 8.2.34 | **8.2.35** |
+
+Build resmi 8.5.12 dan 8.4.27 keluar **22 Okt 2026** (bukan 21 — tanggal ini
+sempat salah di dokumentasi awal repo). Build yang lebih baru dari fix-floor
+**tidak** dieksploitasi oleh rantai ini; `preflight` melaporkan dukungan versi
+sebelum ada paket dikirim.
+
+## Peringatan mitigasi yang sering dikutip salah
+
+| Yang sering disarankan | Kenyataannya |
+|---|---|
+| `memory_limit=-1` sebagai mitigasi | **BUKAN mitigasi lengkap.** Batas memori besar hanya memindahkan titik kegagalan; jalur `longjmp` tetap bisa tercapai. Jangan jadikan ini alasan "sudah aman". |
+| `session.upload_progress.enabled=Off` | Menutup CVE-2026-109618, **tidak** menutup CVE-2026-109619 (rantai yang dipakai tool ini). |
+| Menunggu patch tanpa mitigasi lain | Eksploitasi liar tercatat sejak **17 Okt 2026**, empat hari sebelum build patch terbit. |
+
+Selain dua CVE di atas, advisory 23 Okt 2026 mencatat **CVE-2026-115560**
+("Session upload progress") yang fix-nya menyusul. Ini dicatat sebagai
+informasi — **bukan** blocker rantai dan bukan alasan menahan rilis.
+
 ## Ringkasnya
 
 Rantai gagal di stage 1 (`HEAP_LEAK_FAILED`) bukan karena jumlah worker
@@ -50,6 +79,23 @@ php -i | grep -E '^post_max_size|^upload_max_filesize|^memory_limit'
 # 2. kalau punya akses HTTP saja: kirim body besar, lihat apakah dibuang
 #    (respons kosong / 413 = body tidak sampai)
 ```
+
+## Kanal bukti: `--proof-file`
+
+`-c 'id'` tanpa redirect selalu berakhir **BLIND**: eksekusi bisa sukses tapi
+tidak ada apa pun yang kembali dalam respons HTTP. Kanal bukti memerlukan
+redirect ke file di target, dan `--proof-file NAME` adalah cara yang didukung:
+
+```bash
+php2shell.py exploit -u http://target/index.php --yes --proof-file pv
+# setara -c 'id>/out/pv'  ->  hasil dibaca dari /out/pv
+```
+
+Nama file dibatasi `[A-Za-z0-9_-]{1,24}` dan perintah dasarnya wajib termasuk
+perintah identitas (`id`/`whoami`/`uname`/`hostname`/`pwd`). Ini bukan
+kemudahan kosmetik: membentuk redirect berarti membuka jalur tulis ke disk
+target, jadi permukaannya sengaja sempit. Jalur baca di sisi host adalah
+`<repo>/out/<NAME>` (mount `/out` milik lab).
 
 `php2shell.py preflight -u <url>` mencetak skor + dukungan build, tapi
 **tidak** bisa mengukur `post_max_size` dari luar tanpa mengirim body besar.

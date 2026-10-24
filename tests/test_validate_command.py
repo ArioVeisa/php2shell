@@ -58,6 +58,18 @@ DITOLAK_KONTEKS = ["", "   ", "idXXXXXXXXXXXXXXXXXXXXXXXXXX", "whoami -a -b -c -
 
 
 class TestPagarPerintah(unittest.TestCase):
+    def setUp(self):
+        # ALLOWED_CMDS adalah state GLOBAL. test_allow_cmd_semantik
+        # mengaktifkan 'ls' lewat --allow-cmd; tanpa reset di sini, urutan
+        # eksekusi yang berbeda membuat 'ls /' lolos di test_tool_lain_ditolak.
+        # Reset per-tes membuat hasil tidak bergantung urutan.
+        from lib.exploit_runner import set_allowed_cmds
+        set_allowed_cmds(None)
+
+    def tearDown(self):
+        from lib.exploit_runner import set_allowed_cmds
+        set_allowed_cmds(None)
+
     def test_perintah_diizinkan(self):
         for c in DIIZINKAN:
             with self.subTest(cmd=c):

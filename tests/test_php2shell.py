@@ -269,6 +269,42 @@ class TestKlaimBanner(unittest.TestCase):
             "lib/chain.py berubah — perbarui hash ini setelah review")
 
 
+class TestBannerKejujuranCVE(unittest.TestCase):
+    """Banner dulu mengiklankan DUA CVE seolah keduanya diuji.
+
+    Kenyataannya rantai tool ini hanya CVE-2026-109619 (lib/chain.py menolak
+    target bila cve != 109619). Tes ini mengunci agar banner tidak kembali
+    menulis "109618 + 109619" tanpa keterangan mana yang benar-benar dijalankan.
+    """
+
+    def test_banner_membedakan_diuji_vs_dideteksi(self):
+        rc, out, err = run("version", timeout=90)
+        teks = out + err
+        low = teks.lower()
+        self.assertIn("diuji", low)
+        self.assertIn("deteksi", low)
+        # klaim lama (dua CVE setara) tidak boleh muncul lagi
+        self.assertNotIn("CVE-2026-109618  +  CVE-2026-109619", teks)
+
+    def test_status_cve_tercatat_eksplisit(self):
+        """CVE_SUPPORTED hidup di php2shell.py (bukan lib/chain.py)."""
+        sys.path.insert(0, TOOLKIT)
+        import php2shell as cli
+        self.assertEqual(cli.CVE_SUPPORTED, ("CVE-2026-109619",))
+
+    def test_chain_benar_benar_menolak_109618(self):
+        """Klaim 'hanya 109619' harus berupa kode, bukan dokumentasi."""
+        # Gerbang CLI: cve di luar CVE_SUPPORTED ditolak sebelum rantai jalan.
+        with open(CLI, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn("if cve and cve not in CVE_SUPPORTED", src)
+        # Penolakan kedua, di dalam mesin rantai itu sendiri.
+        with open(os.path.join(TOOLKIT, "lib", "chain.py"), encoding="utf-8") as fh:
+            chainsrc = fh.read()
+        self.assertIn('if cve == "CVE-2026-109618"', chainsrc,
+                      "chain.py tidak lagi menolak 109618 secara eksplisit")
+
+
 class TestBannerTanpaArgumen(unittest.TestCase):
     def test_splash_rc_nol(self):
         rc, out, err = run()
@@ -493,8 +529,61 @@ class TestPreflightSupportField(unittest.TestCase):
         self.assertIn("RCE", line)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+
+class TestAdvisory(unittest.TestCase):
+    """Klaim CVE harus jujur: apa yang dijalankan vs apa yang hanya dideteksi.
+
+    Latar: banner dulu mencetak "CVE-2026-109618 + CVE-2026-109619" seolah
+    keduanya diuji setara. Kenyataannya rantai tool ini hanya CVE-2026-109619
+    (lihat lib/chain.py: menolak target bila cve != 109619). Tes di bawah
+    mengunci kejujuran itu supaya tidak kembali mengklaim dua-duanya.
+    """
+
+    def test_banner_tidak_mengklaim_dua_cve_setara(self):
+        rc, out, err = run(timeout=60)
+        teks = out + err
+        self.assertIn("CVE-2026-109619", teks)
+        # Bentuk klaim lama harus hilang: dua CVE dirangkai "+".
+        self.assertNotIn("CVE-2026-109618  +  CVE-2026-109619", teks)
+        self.assertIn("diuji", teks.lower())
+
+    def test_cve_ids_hanya_109619(self):
+        sys.path.insert(0, TOOLKIT)
+        from lib import banner
+        self.assertEqual(banner.CVE_IDS, "CVE-2026-109619")
+
+    def test_advisory_mencatat_cve_ketiga(self):
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        self.assertEqual(advisory.CVE_115560["id"], "CVE-2026-115560")
+        self.assertTrue(advisory.CVE_115560["same_fix_floor"])
+
+    def test_advisory_tidak_mengklaim_eksploitasi(self):
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        s = advisory.describe()
+        self.assertIn("hanya mengklasifikasi versi", s)
+        self.assertIn("CVE-2026-115560", s)
+
+    def test_flag_advisories_jalan(self):
+        rc, out, err = run("version", "--advisories", timeout=90)
+        # rc 10 = ada versi baru, tetap bukan kegagalan pakai.
+        self.assertIn(rc, (0, 10), err)
+        self.assertIn("ADVISORY PASCA-RILIS", out)
+        self.assertIn("CVE-2026-115560", out)
+
+    def test_repack_22_okt_tercatat(self):
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        self.assertIn("22 Okt 2026", advisory.REPACK_NOTICE)
+        self.assertIn("tanpa naik nomor versi", advisory.REPACK_NOTICE)
+
+    def test_memory_limit_bukan_mitigasi_lengkap(self):
+        sys.path.insert(0, TOOLKIT)
+        from lib import advisory
+        self.assertIn("BUKAN mitigasi lengkap",
+                      advisory.MITIGATION_WARNINGS["memory_limit=-1"])
+
 
 class TestMemProbe(unittest.TestCase):
     """Probe memory_limit: parser harus jujur 'tidak tahu', bukan menebak."""
@@ -611,3 +700,57 @@ class TestBodyCap(unittest.TestCase):
         s = memprobe.describe(None, 12, "rejected")
         self.assertIn("post_max_size", s)
         self.assertNotIn("display_errors", s)
+
+
+class TestProofFileBukanHampa(unittest.TestCase):
+    """--proof-file dulu deklarasi argparse TANPA efek: cmd tetap 'id',
+    proof_mode=False, dan setiap exploit sukses selalu berakhir BLIND.
+    Tes ini mengunci agar flag itu benar-benar membentuk kanal bukti.
+    """
+
+    def test_proof_cmd_for_membentuk_redirect(self):
+        from lib.exploit_runner import proof_cmd_for
+        self.assertEqual(proof_cmd_for("id", "pv"), "id>/out/pv")
+        self.assertEqual(proof_cmd_for("whoami", "b1"), "whoami>/out/b1")
+
+    def test_proof_cmd_dikenali_sebagai_proof_mode(self):
+        from lib.exploit_runner import _is_proof_redirect, _is_identity_proof
+        self.assertTrue(_is_proof_redirect("id>/out/pv"))
+        self.assertTrue(_is_proof_redirect("whoami>/out/p1"))
+        # tetap tertutup untuk path/token lain
+        self.assertFalse(_is_proof_redirect("id>/out/pv; uname -a"))
+        self.assertFalse(_is_proof_redirect("id>/etc/passwd"))
+        # BENTUK 'cat>/out/pv' sah sebagai bentuk; tapi kanal bukti HANYA
+        # dibuka untuk perintah identitas.
+        self.assertTrue(_is_proof_redirect("cat>/out/pv"))
+        self.assertFalse(_is_identity_proof("cat>/out/pv"))
+        self.assertFalse(_is_identity_proof("ls>/out/p1"))
+        self.assertTrue(_is_identity_proof("id>/out/pv"))
+
+    def test_nama_file_berbahaya_ditolak(self):
+        from lib.exploit_runner import proof_cmd_for
+        for bad in ("../etc/passwd", "a b", "pv;id", "", "x" * 40, "pv|id"):
+            with self.assertRaises(ValueError):
+                proof_cmd_for("id", bad)
+
+    def test_perintah_dasar_harus_di_whitelist(self):
+        from lib.exploit_runner import proof_cmd_for
+        with self.assertRaises(ValueError):
+            proof_cmd_for("curl", "pv")
+
+    def test_cli_meneruskan_proof_file_ke_runner(self):
+        """Regresi: _run_exploits harus memakai proof_cmd_for + proof_file=."""
+        with open(CLI, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn("proof_cmd_for", src)
+        self.assertIn("proof_file=proof_name", src)
+
+    def test_proof_host_path_menunjuk_out_repo(self):
+        from lib.exploit_runner import proof_host_path
+        p = proof_host_path("pv")
+        self.assertTrue(p.endswith("/out/pv"))
+        self.assertIn("php2shell", p)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

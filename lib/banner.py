@@ -9,7 +9,8 @@ from __future__ import annotations
 import os
 import sys
 
-CVE_IDS = "CVE-2026-109618 / CVE-2026-109619"
+CVE_IDS = "CVE-2026-109619"          # diuji penuh oleh rantai tool ini
+CVE_FAMILY = "CVE-2026-109618/109619"  # keluarga CVE; 109618 hanya diklasifikasi versinya
 
 # Font standard, DIGENERATE dengan `figlet -w 100 "PHP2SHELL"` — jangan
 # diketik manual. Versi lama salah: terbaca P-H-P-P-S-H-E-L-L (P dobel,
@@ -23,8 +24,10 @@ ART = r"""
 """
 
 TAGLINE = (
-    "  PHP session.upload_progress UAF  ->  unauthenticated RCE\n"
-    "  CVE-2026-109618  +  CVE-2026-109619   |   CVSS 9.2   |   PHP 5.4 - 8.x\n"
+    "  PHP session.upload_progress stale-state UAF  ->  unauthenticated RCE\n"
+    "  diuji di sini: CVE-2026-109619 (rantai penuh)\n"
+    "  terdeteksi  : CVE-2026-109618 (klasifikasi versi; rantai BEDA, tidak dijalankan)\n"
+    "  keluarga CVE sama · CVSS 9.2 · PHP 5.4 - 8.x\n"
 )
 
 USAGE_HINT = (
@@ -116,8 +119,9 @@ def render(mode: str = "", profile: str = "", delay: float = 0.0,
     out.append("  " + c.bold(c.white("P H P 2 S H E L L")) +
                c.dim(f"  v{version}" if version else "") + c.grey("  -  toolkit terpadu"))
     out.append(c.grey("  " + "-" * _WIDTH))
-    out.append(c.yellow("  CVE-2026-109618") + c.white("  +  ") +
-               c.yellow("CVE-2026-109619") + c.white("   CVSS 9.2  unauth RCE  PHP 5.4-8.x"))
+    out.append(c.yellow("  diuji: ") + c.white("CVE-2026-109619") +
+               c.grey(" (rantai penuh)   ") +
+               c.yellow("deteksi: ") + c.grey("CVE-2026-109618 (rantai beda, tidak dijalankan)"))
     out.append(c.white("  fix-floor: ") +
                c.green("8.2.35") + c.white(" / ") +
                c.green("8.3.36") + c.white(" / ") +

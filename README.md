@@ -69,6 +69,31 @@ php-fpm is a strong mitigation (worker dies per-request).
 CDN-hidden versions? **Detection is information, not a gate** — preflight
 reports what it can see and the chain proceeds anyway.
 
+### Post-release advisory (verified 2026-10-24, primary sources)
+
+- **Patches were rebuilt on 22 Oct 2026** — `8.5.12` and `8.4.27` carry
+  ChangeLog entries dated 22 Oct (`Avoid state corruption via bailout`), but the
+  version numbers did not change. The same `8.4.27` can mean the 21 Oct build
+  (not final) or the 22 Oct build (final). **Check the package build date, not
+  just the version string.**
+- **A third CVE exists: `CVE-2026-115560`** (`Session upload progress`).
+  Reserved, full advisory to follow in a regular release. It needs
+  `session.serialize_handler` set to `php_binary`/`php_serialize` and switched
+  to `php` at runtime via `ini_set()` before `session_start()`, plus
+  `session.upload_progress.enabled=On`. Mitigate with
+  `session.upload_progress.enabled=0`. Closed by the same fix-floor.
+- **`memory_limit=-1` is NOT a complete mitigation** (GHSA-w8hw-w9fx-j79w).
+  If a base allocation fails, `longjmp()` can still happen while request memory
+  is reachable. Only upgrading is complete.
+- **`session.upload_progress.enabled=0` only closes 109618 (+115560). It does
+  not close 109619.**
+- **In-the-wild exploitation predates the patch:** first attempts 17 Oct 2026,
+  four days before release, from anonymized/VPN IPs against honeypots
+  (Amazon Threat Intelligence). No confirmed successful compromise is public
+  as of 2026-10-23.
+
+Run `php2shell version --advisories` for this list from the CLI.
+
 ---
 
 ## ❖ Install
@@ -127,9 +152,20 @@ php2shell exploit \
 | |_) | |_| | |_) |__) \___ \| |_| |  _| | |   | |
 |  __/|  _  |  __// __/ ___) |  _  | |___| |___| |___
 |_|   |_| |_|_|  |_____|____/|_| |_|_____|_____|_____|
+  P H P 2 S H E L L  v1.3.0  -  toolkit terpadu
+  ----------------------------------------------------------------
+  diuji: CVE-2026-109619 (rantai penuh)   deteksi: CVE-2026-109618 (rantai beda, tidak dijalankan)
+  fix-floor: 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12
+  terakhir rentan: 8.2.34 / 8.3.35 / 8.4.26 / 8.5.11
+  ----------------------------------------------------------------
+  stealth: curl_cffi JA3 impersonate
+  ----------------------------------------------------------------
 
-  PHP session.upload_progress UAF  ->  unauthenticated RCE
-  CVE-2026-109618  +  CVE-2026-109619   |   CVSS 9.2   |   PHP 5.4 - 8.x
+  mode       : scan  |  detect  |  preflight  |  exploit  |  shell  |  version
+  cepat      : php2shell.py scan -l targets.txt
+  bantuan    : php2shell.py --help
+
+  pagar & peringatan: php2shell.py --help  |  rincian: README.md
 ```
 
 *(persis banner yang dicetak CLI saat dijalankan — sumber: `lib/banner.py`)*
@@ -429,9 +465,9 @@ sendiri (`php:8.4.26-apache`). Tidak ada angka yang dikarang.
 | Flag | Fungsi |
 |---|---|
 | `--quiet` | perkecil output rantai (kebalikan `-v`) |
-| `--cve {CVE-2026-109618,CVE-2026-109619}` | pilih CVE yang ditembak (default 109619) |
+| `--cve {CVE-2026-109619}` | pilih CVE yang ditembak (hanya 109619; nilai lain ditolak — 109618 tidak diimplementasikan) |
 | `--fetch URL` | URL yang di-fetch lewat RCE setelah eksekusi (kanal baca hasil) |
-| `--proof-file FILE` | simpan bukti (PROOF output) ke file |
+| `--proof-file NAME` | bentuk `-c 'id>/out/NAME'` lalu bacakan hasilnya (nama `[A-Za-z0-9_-]{1,24}`; kanal bukti) |
 | `--output-file FILE` | tulis output mentah rantai ke file |
 | `--offsets-file FILE` | pakai profil offset dari file; `''` = jangan pakai profil lab |
 | `--no-auto-offsets` | jangan cari offset otomatis (paksa pakai `--zif-offset`/`--dtor-offset`) |
