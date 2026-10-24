@@ -2,6 +2,18 @@
 """
 lib/chain.py — mesin rantai eksploitasi CVE-2026-109619.
 
+ATRIBUSI (WAJIB DIBACA — lihat ATTRIBUTION.md):
+  Teknik rantai di file ini BUKAN karya kami. Ini port dari riset publik
+  9bie (Qi Deng) — github.com/9bie/php2shell-bypass-aslr-exp — yang
+  mempublikasikan exploit.py untuk CVE-2026-109619 (2-request
+  session.upload_progress UAF + ASLR bypass via heap/libphp leak +
+  aktuator pDestructor = zif_system). Upstream TIDAK mempublikasikan file
+  lisensi; hak cipta default berlaku pada bagian yang merupakan port.
+  Lisensi GPL-3.0 repo ini mencakup kode asli kami (orkestrasi, pagar,
+  proof-reader, transport), tidak mengklaim ulang karya upstream.
+  Verifikator crash CVE-2026-109618: ikow/php2shell-poc
+  (poc/verify_oom_trigger.py) — dirujuk, tidak di-vendor.
+
 INI BAGIAN INTI toolkit. Tidak memanggil exploit.py, tidak butuh file di luar
 folder toolkit/. Semua trafik attacker berupa HTTP biasa.
 

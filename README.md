@@ -15,7 +15,7 @@
 [![License: GPL‑3.0](https://img.shields.io/badge/license-GPL--3.0-informational?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/lab-docker%20one--command-2496ED?style=flat-square&logo=docker&logoColor=white)](#-one-command-lab)
 
-[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
+[Install](#-install) · [Quick start](#-quick-start) · [Lab vs Live](#-lab-target-vs-live-target-baca-ini-sebelum-menjalankan) · [Modes](#-modes) · [Sources](#-where-this-comes-from--sumber--hasil-audit) · [How it works](#-how-it-works) · [Stealth](#-stealth-anti-bot-detection) · [FAQ](#-faq) · [Disclaimer](#-disclaimer-authorized-use-only)
 
 </div>
 
@@ -273,6 +273,56 @@ Uji lokal: `php -l <file>` lalu `php -S 127.0.0.1:8099`.
 | `--no-display-errors` | skip probe display_errors saat detect |
 | `--json / --csv` | output file laporan |
 | `-v` | verbose — tampilkan tiap request |
+
+---
+
+## ❖ Where this comes from — sumber & hasil audit
+
+Biar tidak ada yang menebak: **teknik rantainya bukan karya kami.** Yang kami
+kerjakan adalah reproduksi, orkestrasi, pagar keamanan, dan verifikasi.
+
+| Sumber | Penulis | Yang diambil | Lisensi |
+|---|---|---|---|
+| [9bie/php2shell-bypass-aslr-exp](https://github.com/9bie/php2shell-bypass-aslr-exp) | **9bie (Qi Deng)** | **Rantai inti**: 2-request `session.upload_progress` UAF (CVE-2026-109619), ASLR bypass via heap + `libphp` base leak, aktuator `pDestructor = zif_system`. `lib/chain.py` = port logikanya jadi modul in-process. | tidak ada file lisensi (hak cipta default) |
+| [Zer061/CVE-2026-109618](https://github.com/Zer061/CVE-2026-109618) | **Zer061** (+ v.dir.mir, 9bie) | Fork tempat `exploit.py` acuan byte-level kami diambil (sha256 `ea925683…`). Riwayatnya campuran: `adc5f9b` oleh 9bie, `5fc5669` oleh v.dir.mir (**menambah `--revshell`**), `4752adc` oleh Zer061. | tidak ada file lisensi |
+| [ikow/php2shell-poc](https://github.com/ikow/php2shell-poc) | **ikow** | Verifikator crash CVE-2026-109618 (`poc/verify_oom_trigger.py`). | dirujuk, tidak di-vendor |
+| GHSA-w8hw-w9fx-j79w / GHSA-6wmf-4rv5-p3rp | **PHP Group** | Pemetaan CVE + fix-floor 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 | data advisi publik |
+| `curl_cffi` | lexiforest / yifeikong | JA3/TLS impersonation di `lib/transport.py`. | MIT (dependency) |
+
+**Yang asli di repo ini:** CLI 5 mode, `lib/chain.py` sebagai engine in-process,
+auto-proof baca `out/p1`, pagar perintah (whitelist 14 byte + tolak chaining +
+tanpa `--revshell`), model skor preflight, lapisan stealth (JA3/jitter/audit),
+46 unit test, installer, Docker lab, GPL-3.0.
+Detail lengkap + status lisensi: **[ATTRIBUTION.md](ATTRIBUTION.md)**
+
+### Kenapa `--revshell` tidak ada di sini
+
+`exploit.py` upstream (fork Zer061, commit `5fc5669` oleh v.dir.mir) **punya**
+`--revshell` — payload bash/python/perl + listener `nc` yang menyerahkan shell
+interaktif. Itu mengubah alat bukti-akses menjadi backdoor. Di toolkit ini:
+
+- `--revshell` **tidak terdaftar di parser** (argparse menolaknya sebagai argumen tak dikenal),
+- kata `revshell` / `bash` / `nc` / `sh` **ditolak di level runner** sebelum satu paket pun dikirim,
+- perintah dibatasi 14 byte, hanya `id`/`whoami`/`uname`/`hostname`/`pwd`
+  (+`--allow-cmd` whitelist kecil), operator `; | & $ \` > <` ditolak.
+
+### Hasil audit anti-malware (2026-10-24)
+
+Repo ini dan folder sumbernya diperiksa sebelum dipublikasikan:
+
+| Pemeriksaan | Hasil |
+|---|---|
+| Koneksi keluar ke host hardcoded (C2) | **tidak ada** — hanya `127.0.0.1`, `localhost`, URL dokumentasi |
+| Pencurian kredensial (`~/.ssh`, `.aws`, `/etc/shadow`, cookie upload) | **tidak ada** |
+| Persistence (`crontab`, `systemd`, `.bashrc`, `rc.local`, autostart) | **tidak ada** |
+| Obfuscation (`b64decode` masif, hex blob, `chr()` chain) | **tidak ada** — semua `\x..` adalah byte array protokol di `tools/align8.py`, `tools/warn_probe.py` |
+| Binary tak dikenal | **tidak ada** — hanya `src/php-8.4.26.tar.gz` (source PHP resmi) + 1 PNG screenshot |
+| `subprocess` / `os.system` / `eval` / `exec` | hanya untuk keperluan sah: `docker cp` (ambil `libphp.so`), `python shell/safe_shell.py` (generator), test suite |
+| Socket mentah (`socket.create_connection`) | **wajib** — rantai berjalan lewat TCP langsung supaya handshake TLS tidak dinormalisasi library |
+| `--revshell` / payload reverse shell | **tidak ada di parser**, diblokir di kode |
+
+31 file yang di-track git sudah di-`sha256sum`, 46/46 test lulus. Kalau kamu
+fork repo ini, **diff dulu sebelum percaya** — aturan yang sama kami pakai ke upstream.
 
 ---
 
