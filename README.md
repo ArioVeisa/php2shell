@@ -246,9 +246,40 @@ Opsi penting:
 | `--exploit-profile {bookworm,lab}` | set offset bawaan (bookworm = image resmi) |
 | `--zif-offset / --dtor-offset / --htdata-offset` | offset manual utk build lain |
 | `--retries N` | retry per stage (default 3, heap-fresh via rotasi worker) |
-| `--huge-mb N` | ukuran field OOM stage-1 (default 12) |
+| `--huge-mb N` | paksa ukuran field OOM stage-1 (default: dibaca dari `memory_limit`) |
 | `--force` | paksa lewat preflight TIDAK-READY (tetap konfirmasi) |
 | `--exploit-timeout N` | batas waktu total rantai (default 300s) |
+
+#### Kenapa `--huge-mb` sekarang otomatis
+
+Stage 1 mengirim satu field multipart yang **harus lebih besar** dari
+`memory_limit` target — itulah pemicu OOM-nya. Dulu nilainya dipaku 12 MB,
+dan akibatnya berbeda-beda tergantung target:
+
+| `memory_limit` target | 12 MB hardcoded | sekarang |
+|---|---|---|
+| 8 M | OOM, rantai jalan | baca 8 M → kirim 10 MB |
+| 128 M | **tidak OOM**, rantai mati tanpa sebab jelas | baca 128 M → kirim 147 MB |
+| 512 M | **tidak OOM**, dan 12 MB terkirim sia-sia | berhenti + peringatan |
+
+Kegagalan di baris kedua dan ketiga terlihat identik dari luar ("stage1
+gagal"), padahal penyebabnya beda. Sekarang `exploit` mengirim **satu**
+request probe lebih dulu, membaca angka dari pesan fatal PHP
+(`Allowed memory size of N bytes exhausted`), lalu menyetel field-nya
+sedikit di atas limit.
+
+Yang **tidak** dilakukan tool ini: menaikkan ukuran sampai berhasil.
+Kalau angkanya tidak terbaca (`display_errors=Off`), ia memakai default 12 MB
+dan mengatakan demikian — tidak menyapu 256 MB ke target orang untuk
+menebak. Kalau `memory_limit` di atas 512 MB, ia berhenti dan melapor,
+karena rantai ini memang tidak akan jalan di sana.
+
+```console
+$ php2shell.py exploit -u http://target/index.php -c 'id>/out/p1'
+[*] memory_limit 8 MiB terbaca dari target; field 'big' disetel 10 MB (harus > limit)
+     stage 1: heap leak (percobaan 1/3)
+     PROOF (7.7s): uid=33(www-data) gid=33(www-data)
+```
 
 ### `shell` — generator webshell berpassword
 
@@ -454,7 +485,7 @@ Fork = satu garis keturunan git. Di sini:
 
 Tidak ada satu pun dari mereka yang bisa jadi "parent" tunggal. Yang kami tulis
 sendiri: CLI 6 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
-pagar perintah, skor preflight, mode stealth, 65 unit test, installer, lab Docker.
+pagar perintah, skor preflight, mode stealth, 75 unit test, installer, lab Docker.
 
 ### Kenapa `--revshell` tidak ada di sini
 
@@ -630,7 +661,7 @@ commands, no shells, no exfil primitives) reflects that scope.
 | Command fence | 16 negative test cases, rejected **before** any network I/O |
 | `--revshell` | blocked at runner level (exit 2), not just parser |
 | Multi-target mode | dedupe, auto-https, JSON/CSV verified live |
-| 65 unit tests | `python -m unittest discover -s tests -t .` → OK |
+| 75 unit tests | `python -m unittest discover -s tests -t .` → OK |
 
 ---
 
@@ -647,13 +678,14 @@ php2shell/
 │   ├── detect.py         fingerprint: version, SAPI, upload_progress…
 │   ├── preflight.py      readiness score; detection ≠ gate
 │   ├── build_support.py  tabel RCE / leak-saja / belum-terbukti per build
+│   ├── memprobe.py       baca memory_limit target lewat 1 request
 │   ├── exploit_runner.py orchestration + command fence + auto-proof
 │   ├── reporter.py       JSON / CSV / terminal tables
 │   └── banner.py         the skull ASCII
 ├── shell/                password-protected webshell GENERATOR
 ├── lab/lab_docker.sh     author-config vulnerable lab, one command
 ├── docker/               php.ini / apache.conf / www / offsets.py
-├── tests/                65 unit tests
+├── tests/                75 unit tests
 └── gambar/               screenshot
 ```
 
