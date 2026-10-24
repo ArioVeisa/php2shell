@@ -569,3 +569,45 @@ class TestExploitUsesProbe(unittest.TestCase):
 
 
 
+
+
+class TestBodyCap(unittest.TestCase):
+    """Body yang ditolak target HARUS dibedakan dari target yang aman.
+
+    Kegagalan `post_max_size` menghasilkan HTML 200 yang wajar ("Warning:
+    POST Content-Length ... exceeds the limit") — dulu itu terbaca sebagai
+    "accepted" dan operator diberi HEAP_LEAK_FAILED tanpa sebab.
+    """
+
+    FATAL = (b"<br />\n<b>Fatal error</b>:  Allowed memory size of 8388608 "
+             b"bytes exhausted (tried to allocate 2098791 bytes)")
+    TOOBIG = (b"<br />\n<b>Warning</b>:  PHP Request Startup: POST "
+              b"Content-Length of 16777461 bytes exceeds the limit of "
+              b"8388608 bytes")
+
+    def test_rejected_pada_post_too_big(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.body_cap(self.TOOBIG), "rejected")
+
+    def test_accepted_pada_oom_fatal(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.body_cap(self.FATAL), "accepted")
+
+    def test_rejected_pada_413(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.body_cap(b"x", status=413), "rejected")
+
+    def test_unknown_kalau_kosong(self):
+        from lib import memprobe
+        self.assertEqual(memprobe.body_cap(b""), "unknown")
+
+    def test_unknown_kalau_respons_tanpa_jejak_php(self):
+        from lib import memprobe
+        # HTML 200 biasa tanpa pesan PHP: jangan mengaku tahu.
+        self.assertEqual(memprobe.body_cap(b"<html>ok</html>"), "unknown")
+
+    def test_describe_menyebut_post_max_saat_rejected(self):
+        from lib import memprobe
+        s = memprobe.describe(None, 12, "rejected")
+        self.assertIn("post_max_size", s)
+        self.assertNotIn("display_errors", s)

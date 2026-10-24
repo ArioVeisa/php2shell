@@ -38,6 +38,12 @@ class Preflight:
     # dibocorkan" — sebelumnya preflight menyebut keduanya READY.
     support_level: str = build_support.UNKNOWN
     support_text: str = ""
+    # Apakah body besar benar-benar sampai ke PHP? Diukur dari luar dengan
+    # mengirim satu field 16 MB (sama seperti probe memory_limit). Ini yang
+    # menentukan stage-1 bisa meleak apa pun: kalau post_max_size lebih kecil
+    # dari body, PHP membuang body sebelum kode jalan — tanpa pesan apa pun
+    # yang membedakannya dari "target aman".
+    body_cap: str = "unknown"
 
     def as_dict(self) -> dict:
         return {
@@ -46,6 +52,7 @@ class Preflight:
             "max_score": self.max_score,
             "ready": self.ready,
             "support": {"level": self.support_level, "text": self.support_text},
+            "body_cap": self.body_cap,
             "checks": self.checks,
             "blockers": self.blockers,
             "notes": self.notes,
@@ -144,6 +151,21 @@ def preflight(d: Detection) -> Preflight:
             "Rantai kemungkinan berhenti di stage 1-2; siapkan offset manual "
             "kalau tetap ingin mencoba."
         )
+
+    # --- batas ukuran body (sinyal, bukan blocker) ---
+    # Diukur dari probe yang sama; lihat docs/SYARAT_TARGET.md. Kalau target
+    # membuang body besar (post_max_size kecil), stage 1 MUSTAHIL meleak apa
+    # pun — kegagalannya akan terlihat sama persis dengan "target aman".
+    if p.body_cap == "rejected":
+        p.checks["body_cap"] = ("TERBATAS — body 16 MB ditolak/dibuang; "
+                                "post_max_size target lebih kecil dari body stage-1")
+        p.notes.append(
+            "post_max_size/upload_max_filesize target kemungkinan < 16 MB. "
+            "Body stage-1 dibuang PHP sebelum kode jalan, jadi stage leak "
+            "akan gagal apa pun offset yang dipakai. Bukan bukti target aman."
+        )
+    elif p.body_cap == "accepted":
+        p.checks["body_cap"] = "OK — body 16 MB diterima PHP"
 
     # Aturan READY (revisi 23 Okt 2026): HANYA blocker keras yang menahan.
     # Blocker = target tak terjangkau, atau versi TERBACA sudah-patch.

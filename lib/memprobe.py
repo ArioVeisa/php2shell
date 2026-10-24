@@ -64,6 +64,14 @@ _UNITS = {"": 1, b"": 1, "K": 1024, b"K": 1024,
 # terbaca hampir pasti artefak (mis. potongan Content-Length), bukan limit.
 _SANE_MAX = 8 * 1024 ** 3
 
+# PHP menolak body sebelum skrip jalan. Pesannya berbeda dari OOM biasa:
+#   Warning: POST Content-Length of N bytes exceeds the limit of M bytes
+# Ini bukan leak, tapi justru INFORMASI: kita jadi tahu batas body target,
+# dan tahu stage-1 mustahil berhasil di sana.
+_POST_TOO_BIG = re.compile(
+    rb"POST\s+Content-Length\s+of\s+\d+\s+bytes\s+exceeds\s+the\s+limit",
+    re.I)
+
 
 def parse_limit(resp: bytes) -> int | None:
     """Ambil memory_limit (byte) dari respons. None kalau tidak terbocorkan."""
@@ -128,11 +136,16 @@ def format_mb(n: int) -> str:
     return f"{n} B"
 
 
-def describe(limit_bytes: int | None, chosen_mb: int) -> str:
+def describe(limit_bytes: int | None, chosen_mb: int, cap: str = "unknown") -> str:
     """Satu baris penjelasan untuk preflight/verbose."""
     if limit_bytes:
         return (f"memory_limit {format_mb(limit_bytes)} terbaca dari target; "
                 f"field 'big' disetel {chosen_mb} MB (harus > limit)")
+    if cap == "rejected":
+        # Bukan soal display_errors: body-nya memang dibuang sebelum skrip
+        # jalan, jadi tidak ada yang bisa membocorkan limit.
+        return ("body 16 MB ditolak target sebelum skrip jalan — "
+                "post_max_size terlalu kecil untuk stage-1")
     return (f"memory_limit tidak terbaca (display_errors mungkin Off); "
             f"field 'big' pakai default {chosen_mb} MB")
 
@@ -170,3 +183,33 @@ def probe(target_url: str, *, probe_mb: int = 16, timeout: float = 45.0,
         else:
             t.log("[!] memory_limit tidak terbocorkan (display_errors Off?)")
     return limit, resp
+
+
+def body_cap(resp: bytes, status: int = 0) -> str:
+    """Apakah body besar sampai ke PHP? 'accepted' | 'rejected' | 'unknown'.
+
+    Ini pembeda yang hilang selama ini, dan pesan PHP-nya eksplisit —
+    terbukti dari dua lab dengan setelan berbeda:
+
+        post_max_size=8M  -> "Warning: POST Content-Length of 16777461
+                              bytes exceeds the limit of 8388608 bytes"
+        post_max_size=64M -> "Fatal error: Allowed memory size of
+                              8388608 bytes exhausted"
+
+    Respons non-kosong saja TIDAK cukup untuk menyimpulkan body diterima:
+    peringatan "exceeds the limit" juga berupa HTML 200 yang wajar. Yang
+    membedakan adalah jenis pesannya, bukan ada/tidaknya respons.
+    """
+    if status in (413, 400):
+        return "rejected"
+    if not resp:
+        # Kosong total: paling mungkin body dibuang, tapi bisa juga koneksi
+        # diputus WAF. Jangan mengaku tahu.
+        return "unknown"
+    if _POST_TOO_BIG.search(resp):
+        return "rejected"
+    if parse_limit(resp) is not None:
+        return "accepted"
+    # Ada respons tapi tak ada jejak PHP memproses body. Bisa target yang
+    # tidak melakukan apa-apa, bisa WAF. Tidak layak disebut 'accepted'.
+    return "unknown"

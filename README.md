@@ -274,6 +274,31 @@ dan mengatakan demikian — tidak menyapu 256 MB ke target orang untuk
 menebak. Kalau `memory_limit` di atas 512 MB, ia berhenti dan melapor,
 karena rantai ini memang tidak akan jalan di sana.
 
+#### Syarat target yang benar-benar menentukan
+
+Rantai gagal di stage 1 bukan karena jumlah worker Apache, melainkan karena
+**request tidak pernah sampai utuh ke PHP**. Kalau `post_max_size` lebih
+kecil dari body stage-1, PHP membuang body itu sebelum skrip jalan — dan
+di luar kegagalannya identik dengan "target tidak rentan".
+
+| Setelan | Syarat | Kenapa |
+|---|---|---|
+| `post_max_size` | ≥ 64M | body stage-1 lebih besar dari `memory_limit`; kalau ini lebih kecil, body dibuang mentah-mentah |
+| `upload_max_filesize` | ≥ 64M | batas per-file untuk field multipart |
+
+`exploit` sekarang membedakan keduanya dan berhenti dalam ~2 detik dengan
+alasan yang benar:
+
+```
+[*] body 16 MB ditolak target sebelum skrip jalan — post_max_size terlalu kecil untuk stage-1
+     gagal (0.0s): target menolak body stage-1 sebelum PHP menjalankan skrip ...
+```
+
+Klaim populer "butuh 150 worker, sisakan 1" (dari `9bie`) **tidak terbukti**
+saat diuji ulang: rantai jalan dengan 1 worker maupun 150 worker. Angka 150
+ternyata hanya bawaan `mpm_prefork.conf` stock. Percobaan lengkapnya ada di
+[`docs/SYARAT_TARGET.md`](docs/SYARAT_TARGET.md).
+
 ```console
 $ php2shell.py exploit -u http://target/index.php -c 'id>/out/p1'
 [*] memory_limit 8 MiB terbaca dari target; field 'big' disetel 10 MB (harus > limit)
@@ -485,7 +510,7 @@ Fork = satu garis keturunan git. Di sini:
 
 Tidak ada satu pun dari mereka yang bisa jadi "parent" tunggal. Yang kami tulis
 sendiri: CLI 6 mode, engine in-process `lib/chain.py`, auto-proof baca `out/p1`,
-pagar perintah, skor preflight, mode stealth, 75 unit test, installer, lab Docker.
+pagar perintah, skor preflight, mode stealth, 81 unit test, installer, lab Docker.
 
 ### Kenapa `--revshell` tidak ada di sini
 
@@ -661,7 +686,7 @@ commands, no shells, no exfil primitives) reflects that scope.
 | Command fence | 16 negative test cases, rejected **before** any network I/O |
 | `--revshell` | blocked at runner level (exit 2), not just parser |
 | Multi-target mode | dedupe, auto-https, JSON/CSV verified live |
-| 75 unit tests | `python -m unittest discover -s tests -t .` → OK |
+| 81 unit tests | `python -m unittest discover -s tests -t .` → OK |
 
 ---
 
@@ -685,7 +710,8 @@ php2shell/
 ├── shell/                password-protected webshell GENERATOR
 ├── lab/lab_docker.sh     author-config vulnerable lab, one command
 ├── docker/               php.ini / apache.conf / www / offsets.py
-├── tests/                75 unit tests
+├── docs/                 SYARAT_TARGET.md — apa yang menentukan rantai jalan
+├── tests/                81 unit tests
 └── gambar/               screenshot
 ```
 
