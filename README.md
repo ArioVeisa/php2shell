@@ -201,16 +201,21 @@ Semua flag: `php2shell --help`.
 
 ## ❖ Kapan rantai ini jalan?
 
-Enam syarat sekaligus — satu gagal, rantai gagal:
+Lima syarat sekaligus — satu gagal, rantai gagal:
 
 | # | Syarat | Kenapa |
 |---|---|---|
 | 1 | PHP < 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 | di atasnya = patch, bug sudah hilang |
 | 2 | Apache **mod_php + prefork** | FPM membunuh child saat startup gagal — state busuk tidak selamat |
-| 3 | `MaxRequestWorkers 1` | request A dan B harus mendarat di worker yang sama |
-| 4 | `KeepAlive Off` | pemisahan koneksi producer/consumer yang bersih |
-| 5 | `session.upload_progress = On` + `cleanup = On` | primitive pemicunya |
-| 6 | Offset cocok dengan build | salah offset = crash, bukan RCE |
+| 3 | `session.upload_progress = On` + `cleanup = On` | primitive pemicunya |
+| 4 | `post_max_size` ≥ 64M (+ `memory_limit` kecil, mis. 8M) | body harus OOM di tengah pemrosesan, bukan dibuang lebih awal |
+| 5 | Offset cocok dengan build | salah offset = crash, bukan RCE |
+
+**Yang sering dikira syarat tapi bukan** (dibantah pengujian di
+[docs/SYARAT_TARGET.md](docs/SYARAT_TARGET.md)): `MaxRequestWorkers 1` —
+rantai terbukti jalan di 150 worker stock; `KeepAlive Off` — membantu
+determinisme, bukan syarat; `display_errors = On` — tidak wajib, probe
+menangani mode `STDOUT`.
 
 Endpoint target bisa sesederhana `<?php echo "OK\n"; ?>` — tidak butuh
 `session_start()`, tidak butuh fitur upload.
